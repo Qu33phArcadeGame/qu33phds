@@ -1,0 +1,26 @@
+name: Build Qu33ph DS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: skylyrac/blocksds:slim-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build qu33ph.nds
+        run: |
+          # use the standard BlocksDS ARM9 template Makefile that ships in the SDK
+          T=$(find /opt/blocksds -path '*templates*rom_arm9*' -name Makefile | head -n1)
+          echo "Using template: $T"
+          cp "$T" Makefile
+          make NAME=qu33ph GAME_TITLE="Qu33ph DS" GAME_SUBTITLE="Flick markers" GAME_AUTHOR="Qu33ph"
+          ls -la *.nds
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qu33ph-nds
+          path: "*.nds"
