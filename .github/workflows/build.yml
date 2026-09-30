@@ -13,11 +13,24 @@ jobs:
 
       - name: Build qu33ph.nds
         run: |
-          # use the standard BlocksDS ARM9 template Makefile that ships in the SDK
-          T=$(find /opt/blocksds -path '*templates*rom_arm9*' -name Makefile | head -n1)
+          echo "BLOCKSDS is set to: '$BLOCKSDS'"
+          T=""
+          for base in "$BLOCKSDS" /opt/wonderful/thirdparty/blocksds/core /opt/blocksds/core /opt/wonderful /opt /usr/local; do
+            [ -n "$base" ] && [ -d "$base" ] || continue
+            T=$(find "$base" -path '*templates*rom_arm9*' -name Makefile 2>/dev/null | head -n1)
+            [ -n "$T" ] && break
+          done
+          if [ -z "$T" ]; then
+            echo "Could not find the BlocksDS template. What is installed:"
+            ls -la /opt || true
+            find / -maxdepth 6 -type d -name templates 2>/dev/null | head -n 20
+            exit 1
+          fi
+          CORE="${T%%/templates/*}"
           echo "Using template: $T"
+          echo "BlocksDS core:  $CORE"
           cp "$T" Makefile
-          make NAME=qu33ph GAME_TITLE="Qu33ph DS" GAME_SUBTITLE="Flick markers" GAME_AUTHOR="Qu33ph"
+          make BLOCKSDS="$CORE" NAME=qu33ph GAME_TITLE="Qu33ph DS" GAME_SUBTITLE="Flick markers" GAME_AUTHOR="Qu33ph"
           ls -la *.nds
 
       - uses: actions/upload-artifact@v4
