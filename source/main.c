@@ -71,7 +71,7 @@ static void drawTitle(void) {
     char s[32], a[10];
     if (sv.high1p[0].name[0]) { scoreStr(a, sv.high1p[0].score2); sprintf(s, "HIGH SCORE  %s", a); textC(bufTop, 128, s, WHITE, 1); }
     textC(bufTop, 150, "swipe or D-pad + A to throw", GREY, 1);
-    textC(bufTop, 166, saveOK ? "progress saves to your SD card" : "no SD card: progress won't be kept", saveOK ? GREY : RED, 1);
+    textC(bufTop, 166, saveOK ? "progress saves to your SD card" : "no SD card: progress not saved", saveOK ? GREY : RED, 1);
     fillScreen(bufBot, DARK);
     layoutGrid(11, 2, 4, 27, 4);
     for (int i = 0; i < 11; i++) strcpy(B[i].label, TITLE_ITEMS[i]);
@@ -136,7 +136,7 @@ static void inputShop(void) {
 
 // ── achievements (2 pages of 12; L/R or the arrows change page) ───────────
 static void achLayout(void) {
-    layoutGrid(14, 2, 4, 25, 4);
+    layoutGrid(14, 2, 3, 23, 3);
     for (int i = 0; i < 12; i++) { int a = page * 12 + i; strcpy(B[i].label, ACH_NAME[a]); B[i].col = (sv.ach & (1u << a)) ? GOLD : GREY; }
     strcpy(B[12].label, page ? "< PAGE 1" : "PAGE 2 >"); strcpy(B[13].label, "BACK");
 }

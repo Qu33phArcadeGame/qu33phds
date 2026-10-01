@@ -77,6 +77,7 @@ extern const u16 *fieldPix;      // the field strip the game draws (tinted per t
 // ── drawing (draw.c) ──────────────────────────────────────────────────────
 extern u16 bufTop[SW * SH], bufBot[SW * SH];
 void gpx(int x, int gy, u16 c);
+extern int gClipLo, gClipHi;
 void grect(int x, int gy, int w, int h, u16 c);
 void blitRot(const u16 *spr, int w, int h, int cx, int cy, float ang);
 void blit(u16 *buf, const u16 *spr, int w, int h, int x, int y);

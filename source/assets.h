@@ -30,6 +30,15 @@ extern const u16 mkc_blue[5394];
 extern const u16 coin[324];
 #define COIN_W 18
 #define COIN_H 18
+extern const u16 pm_green[900];
+#define PM_GREEN_W 30
+#define PM_GREEN_H 30
+extern const u16 pm_red[900];
+#define PM_RED_W 30
+#define PM_RED_H 30
+extern const u16 pm_blue[1334];
+#define PM_BLUE_W 46
+#define PM_BLUE_H 29
 extern const u16 slot_logo[2704];
 #define SLOT_LOGO_W 52
 #define SLOT_LOGO_H 52

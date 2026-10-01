@@ -163,14 +163,14 @@ static int checkWin(const int *r, const char **label) {
 }
 static void spin(int bet) {
     if (spinT > 0 || sv.coins < bet) { if (sv.coins < bet) lastLabel = "not enough coins"; return; }
-    sv.coins -= bet; spinBet = bet; spinT = 90; lastWin = 0; lastLabel = "";
+    sv.coins -= bet; spinBet = bet; spinT = 13; lastWin = 0; lastLabel = "";
     for (int i = 0; i < 3; i++) result[i] = pickSym();
     sv.slotSpins++; unlockAch(A_SLOT_SPIN);
 }
 void updateSlot(void) {
     if (spinT <= 0) return;
     spinT--;
-    for (int i = 0; i < 3; i++) { int stopAt = 60 - i * 25; if (spinT > stopAt) { if (frameCount % 3 == 0) reel[i] = rand() % 7; } else reel[i] = result[i]; }
+    for (int i = 0; i < 3; i++) { int stopAt = 9 - i * 4; if (spinT > stopAt) reel[i] = rand() % 7; else reel[i] = result[i]; }
     if (spinT == 0) {
         int w = checkWin(result, &lastLabel);
         if (w) {
@@ -216,7 +216,7 @@ void inputSlot(int down, int tx, int ty) {
 // ══ PLINQU33PH ════════════════════════════════════════════════════════════
 static const int BINS[7] = { 1, 2, 5, 10, 5, 2, 1 };
 #define PEG_ROWS 7
-typedef struct { float x, y, vx, vy; int live, done; } Ball;
+typedef struct { float x, y, vx, vy, rot, spin; int live, done; } Ball;
 static Ball balls[3]; static int dropIdx, paid, aimX = 128, plWin, plSel, plTouch;
 static int pegX(int r, int c) { return 18 + c * 32 + (r % 2 ? 16 : 0); }
 static int pegY(int r) { return 34 + r * 18; }
@@ -230,11 +230,13 @@ static void drop(void) {
     if (!paid) { if (sv.coins < 5) return; sv.coins -= 5; paid = 1; saveWrite(); }
     Ball *b = &balls[dropIdx++];
     b->x = aimX; b->y = 10; b->vx = (frand() - 0.5f) * 0.6f; b->vy = 0; b->live = 1; b->done = 0;
+    b->rot = 1.5708f; b->spin = (frand() - 0.5f) * 0.1f;
 }
 void updatePlinko(void) {
     for (int i = 0; i < 3; i++) {
         Ball *b = &balls[i]; if (!b->live) continue;
         b->vy += 0.16f; b->x += b->vx; b->y += b->vy; b->vx *= 0.995f;
+        b->rot += b->spin; b->spin *= 0.985f;
         for (int r = 0; r < PEG_ROWS; r++) for (int c = 0; c < pegCount(r); c++) {
             float dx = b->x - pegX(r, c), dy = b->y - pegY(r), d2 = dx * dx + dy * dy;
             if (d2 < 81.0f && d2 > 0.01f) {                               // ball r 6 + peg r 3
@@ -242,6 +244,10 @@ void updatePlinko(void) {
                 b->x = pegX(r, c) + nx * 9; b->y = pegY(r) + ny * 9;
                 if (rel < 0) { b->vx -= 1.5f * rel * nx; b->vy -= 1.5f * rel * ny; }
                 b->vx += (frand() - 0.5f) * 0.5f;
+                // the marker tumbles: a glancing hit spins it the way it was knocked
+                b->spin += (b->vx * ny - b->vy * nx) * 0.06f;
+                if (b->spin > 0.4f) b->spin = 0.4f;
+                if (b->spin < -0.4f) b->spin = -0.4f;
             }
         }
         if (b->x < 6) { b->x = 6; b->vx = -b->vx * 0.5f; }
@@ -270,12 +276,14 @@ void drawPlinko(void) {
         sprintf(s, "%d", BINS[i]); text(bufBot, (x0 + x1) / 2 - textW(s, 1) / 2, 175, s, BINS[i] == 10 ? GOLD : WHITE, 1);
     }
     const u16 bc[3] = { COL(31, 6, 6), COL(6, 28, 8), COL(8, 12, 31) };
-    if (dropIdx < 3) { rect(bufBot, aimX - 5, 2, 11, 11, bc[dropIdx]); text(bufBot, aimX - 3, 14, "v", WHITE, 1); }
-    else { int live = 0; for (int i = 0; i < 3; i++) live |= balls[i].live; if (!live) textC(bufTop, 118, "A or tap for another set", YELLOW, 1); }
-    for (int i = 0; i < 3; i++) if (balls[i].live || balls[i].done) {
-        int x = (int)balls[i].x, y = (int)balls[i].y;
-        for (int dy = -6; dy <= 6; dy++) for (int dx = -6; dx <= 6; dx++) if (dx * dx + dy * dy <= 36) rect(bufBot, x + dx, y + dy, 1, 1, bc[i]);
-    }
+    (void)bc;
+    if (dropIdx >= 3) { int live = 0; for (int i = 0; i < 3; i++) live |= balls[i].live; if (!live) textC(bufTop, 118, "A or tap for another set", YELLOW, 1); }
+    // the real markers, drawn on the bottom screen (gy 192+ = bottom), spinning as they fall
+    const u16 *PS[3] = { pm_red, pm_green, pm_blue }; const int PW[3] = { PM_RED_W, PM_GREEN_W, PM_BLUE_W }, PH[3] = { PM_RED_H, PM_GREEN_H, PM_BLUE_H };
+    gClipLo = SH; gClipHi = 2 * SH;
+    for (int i = 0; i < 3; i++) if (balls[i].live || balls[i].done) blitRot(PS[i], PW[i], PH[i], (int)balls[i].x, SH + (int)balls[i].y, balls[i].rot);
+    if (dropIdx < 3) blitRot(PS[dropIdx], PW[dropIdx], PH[dropIdx], aimX, SH + 12, 1.5708f);
+    gClipLo = 0; gClipHi = 2 * SH;
 }
 void inputPlinko(int down, int held, int tx, int ty) {
     if (down & KEY_B) { goScreen(S_TITLE); return; }

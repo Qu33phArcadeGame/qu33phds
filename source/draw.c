@@ -12,8 +12,9 @@ float fcos(float a) { return fsin(a + 1.5707963f); }
 float frand(void) { return (rand() % 1000) / 1000.0f; }
 
 // ── both screens as one tall canvas: gy 0-191 top, 192-383 bottom ────────
+int gClipLo = 0, gClipHi = 2 * SH;           // rows of the tall canvas a drawing pass may touch
 void gpx(int x, int gy, u16 c) {
-    if ((unsigned)x >= SW) return;
+    if ((unsigned)x >= SW || gy < gClipLo || gy >= gClipHi) return;
     if ((unsigned)gy < SH) bufTop[gy * SW + x] = c;
     else if ((unsigned)(gy - SH) < SH) bufBot[(gy - SH) * SW + x] = c;
 }

@@ -22,7 +22,15 @@ static Marker mk[3];
 static int current;
 int orient;
 int score2[2], player, p2Round, roundFrames, totalFrames, suddenDeath, matchOver;
-static float chairX = FIELD_CX, chairY = 117.0f, chairR = 35.0f, camY;
+static float chairX = FIELD_CX, chairY = 117.0f, chairR = 35.0f;
+// The BOTTOM screen is fixed on the launch end (you always see what you're throwing).
+// Only the TOP screen scrolls: at rest it shows the stretch just above the bottom screen,
+// it follows a marker up the table, and holds on where it landed until the set is scored.
+#define BOT_PX   (FIELD_H - SH)                    // strip row shown at the top of the bottom screen
+#define TOP_REST (FIELD_H - 2 * SH)                // top screen at rest: directly above the bottom one
+static float topPx = TOP_REST;                     // strip row shown at the top of the top screen
+static int passOff;                                // the current drawing pass's offset (see matchDraw)
+static int lastThrown = -1;
 static int magnetAcc;
 static const char *ORIENT_NAME[3] = { "VERTICAL", "ANGLED", "FLAT" };
 
@@ -65,7 +73,7 @@ void musicStop(void) { if (musicCh >= 0) { soundKill(musicCh); musicCh = -1; } }
 static float dist(float ax, float ay, float bx, float by) { return fsqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by)); }
 static int touching(Marker *a, Marker *b) { return dist(a->x, a->y, b->x, b->y) < TOUCH_DIST; }
 static int wsx(float wx) { return (int)((wx - VX0) * K); }
-static int wsy(float wy) { return (int)(wy * K - camY * K); }
+static int wsy(float wy) { return (int)(wy * K) - passOff; }
 
 // ── a turn ────────────────────────────────────────────────────────────────
 static void resetSet(void) { current = 0; memset(mk, 0, sizeof mk); }
@@ -75,7 +83,7 @@ void startMatch(void) {
     if (shopActive(SH_XTIME)) rt += 5;
     totalFrames = (mode == M_TWO) ? rt * 60 : (rt * 3 / 2) * 60;     // 1P & Olympics: sudden death for the last third
     chairX = FIELD_CX; chairY = 117.0f;
-    camY = WORLD_H - VIEW_H; bannerT = 0;
+    topPx = TOP_REST; lastThrown = -1; bannerT = 0;
     for (int i = 0; i < 6; i++) pops[i].life = 0;
     for (int i = 0; i < 48; i++) conf[i].life = 0;
 }
@@ -94,7 +102,7 @@ static void throwMarker(float dx, float dy) {
     m->vx = dx * 0.2f; m->vy = dy * 0.2f; m->curve = dx * 0.0003f;
     m->rot = orient == 0 ? 1.0472f : orient == 1 ? 1.5708f : 0.0f;
     m->spin = orient == 0 ? 0.08f : orient == 1 ? 0.12f : 0.18f;
-    m->col = current;
+    m->col = current; lastThrown = current;
     current++;
     sfxThrow(orient);
 }
@@ -130,6 +138,7 @@ static void tryAdvanceRound(void) {
     int rs = calcRoundScore();
     addScore(rs);
     char t[16], s[10]; scoreStr(s, rs); sprintf(t, "+%s", s);
+    lastThrown = -1;                                   // set scored: the top screen glides back to rest
     if (!g->fallen && !r->fallen && !b->fallen && touching(g, r) && touching(r, b) && touching(g, b)) {
         showBanner("QU33PH!", t, YELLOW); sfxPlop(); trackQu33ph(suddenDeath);
         confetti((g->x + r->x + b->x) / 3, (g->y + r->y + b->y) / 3);
@@ -192,14 +201,16 @@ void matchUpdate(void) {
     for (int i = 0; i < 48; i++) if (conf[i].life > 0) { conf[i].life--; conf[i].vy += 0.25f; conf[i].x += conf[i].vx; conf[i].y += conf[i].vy; }
     if (bannerT > 0) bannerT--;
     tryAdvanceRound();
-    // camera: rest on the launch end, follow the lead marker up the table (like the website)
-    float target = WORLD_H - VIEW_H; int lead = -1;
+    // top-screen camera: follow the marker that's moving furthest up the table; once it
+    // stops, stay on the last marker thrown so you can see where it landed
+    float target = TOP_REST; int lead = -1;
     for (int i = 0; i < current; i++) if (!mk[i].stopped && !mk[i].fallen && (lead < 0 || mk[i].y < mk[lead].y)) lead = i;
-    if (lead >= 0) target = mk[lead].y - VIEW_H * 0.45f;
+    if (lead < 0 && lastThrown >= 0 && lastThrown < current && !mk[lastThrown].fallen) lead = lastThrown;
+    if (lead >= 0) target = mk[lead].y * K - SH * 0.55f;
     if (target < 0) target = 0;
-    if (target > WORLD_H - VIEW_H) target = WORLD_H - VIEW_H;
-    camY += (target - camY) * (target > camY ? 0.14f : 0.22f);
-    if (fabsf_(target - camY) < 0.4f) camY = target;
+    if (target > TOP_REST) target = TOP_REST;
+    topPx += (target - topPx) * (target < topPx ? 0.16f : 0.10f);
+    if (fabsf_(target - topPx) < 0.5f) topPx = target;
 }
 
 // ── aiming with buttons ───────────────────────────────────────────────────
@@ -236,13 +247,13 @@ static void markerSprite(int col, const u16 **s, int *w, int *h) {
     else { *s = col == 0 ? (cart ? mkc_green : mk_green) : (cart ? mkc_red : mk_red); *w = MK_GREEN_W; *h = MK_GREEN_H; }
 }
 static const u16 MCOL[3] = { COL(6, 28, 8), COL(31, 6, 6), COL(8, 12, 31) };
-void matchDraw(void) {
-    int top = (int)(camY * K);
-    if (top < 0) top = 0;
-    if (top > FIELD_H - 2 * SH) top = FIELD_H - 2 * SH;
-    memcpy(bufTop, fieldPix + top * SW, sizeof bufTop);
-    memcpy(bufBot, fieldPix + (top + SH) * SW, sizeof bufBot);
-    camY = top / K;
+static void drawWorld(void) {
+    // markers still waiting this set sit on the table above the launch spot, as on the website
+    for (int i = current; i < 3; i++) {
+        const u16 *sp; int w, h; markerSprite(i, &sp, &w, &h);
+        float a = orient == 0 ? 1.0472f : orient == 1 ? 1.5708f : 0.0f;
+        blitRot(sp, w, h, wsx((LEFT_EDGE + RIGHT_WALL) / 2), wsy(LAUNCH_Y - 30 - i * 46), a);
+    }
     if (suddenDeath) blitRot(chair, CHAIR_W, CHAIR_H, wsx(chairX), wsy(chairY), 0);
     for (int i = 0; i < current; i++) {
         Marker *m = &mk[i];
@@ -261,6 +272,19 @@ void matchDraw(void) {
     }
     for (int i = 0; i < 48; i++) if (conf[i].life > 0) grect(wsx(conf[i].x), wsy(conf[i].y), 3, 3, conf[i].c);
     for (int i = 0; i < 6; i++) if (pops[i].life > 0) gtext(wsx(pops[i].x), wsy(pops[i].y), pops[i].text, pops[i].col, 1);
+}
+void matchDraw(void) {
+    int tp = (int)topPx;
+    memcpy(bufTop, fieldPix + tp * SW, sizeof bufTop);
+    memcpy(bufBot, fieldPix + BOT_PX * SW, sizeof bufBot);
+    // draw everything in the field twice: once with the top screen's scroll (clipped to it),
+    // once with the fixed bottom screen's (clipped to it), so markers cross the gap correctly
+    for (int pass = 0; pass < 2; pass++) {
+        passOff = pass == 0 ? tp : BOT_PX - SH;        // tall-canvas rows: top 0-191, bottom 192-383
+        gClipLo = pass == 0 ? 0 : SH; gClipHi = pass == 0 ? SH : 2 * SH;
+        drawWorld();
+    }
+    gClipLo = 0; gClipHi = 2 * SH;
     // HUD
     char s[40], a[12], b[12];
     int left = (totalFrames - roundFrames + 59) / 60; if (left < 0) left = 0;
@@ -277,7 +301,6 @@ void matchDraw(void) {
     }
     if (suddenDeath) textC(bufTop, 8, "SUDDEN DEATH", RED, 1);
     if (bannerT > 0) { textC(bufTop, 70, banner[0], bannerCol, 2); if (banner[1][0]) textC(bufTop, 104, banner[1], WHITE, 2); }
-    for (int i = current; i < 3; i++) { const u16 *sp; int w, h; markerSprite(i, &sp, &w, &h); blitRot(sp, w, h, 20 + (i - current) * 26, SH + 150, 1.5708f); }
     text(bufBot, SW - textW(ORIENT_NAME[orient], 1) - 6, SH - 18, ORIENT_NAME[orient], WHITE, 1);
     text(bufBot, SW - textW("L/R", 1) - 6, SH - 32, "L/R", GREY, 1);
 }
