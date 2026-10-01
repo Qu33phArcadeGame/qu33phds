@@ -3,7 +3,6 @@ GAME_TITLE    := Qu33ph DS
 GAME_SUBTITLE := Flick markers
 GAME_AUTHOR   := Qu33ph
 SOURCEDIRS    := source
-NITROFSDIR    := nitrofs
 
 # BlocksDS SDK
 BLOCKSDS ?= /opt/blocksds/core
@@ -18,14 +17,8 @@ DLDI ?= $(BLOCKSDS)/sys/dldi_r4/r4tf.dldi
 all: $(ROM)
 
 $(ROM): FORCE
-	@echo "Preparing Qu33ph arcade packs..."
-	rm -f source/assets_mini.c
-	mkdir -p nitrofs
-	find . -name '*.pak' -not -path './nitrofs/*' -exec cp {} nitrofs/ \;
-	test -f nitrofs/mini.pak
-	test -f nitrofs/ball.pak
-	@echo "Building with BlocksDS: $(RULES)"
-	$(MAKE) -f "$(RULES)" NITROFSDIR=nitrofs
+	@echo "Building Qu33ph DS with arcade packs embedded in ROM..."
+	$(MAKE) -f "$(RULES)"
 
 # Patch a COPY with the original-R4/R4TF driver shipped by BlocksDS.
 # For an R4i/clone, set DLDI=/path/to/the/correct/card.dldi instead.
@@ -36,6 +29,5 @@ dldipatch: $(ROM)
 clean:
 	$(MAKE) -f "$(RULES)" clean || true
 	rm -f "$(ROM)" "$(R4_ROM)"
-	rm -rf nitrofs
 
 FORCE:
