@@ -18,6 +18,39 @@ extern const u16 chair[3364];
 extern const u16 logo[14400];
 #define LOGO_W 120
 #define LOGO_H 120
+extern const u16 mkc_green[3364];
+#define MKC_GREEN_W 58
+#define MKC_GREEN_H 58
+extern const u16 mkc_red[3364];
+#define MKC_RED_W 58
+#define MKC_RED_H 58
+extern const u16 mkc_blue[5394];
+#define MKC_BLUE_W 93
+#define MKC_BLUE_H 58
+extern const u16 coin[324];
+#define COIN_W 18
+#define COIN_H 18
+extern const u16 slot_logo[2704];
+#define SLOT_LOGO_W 52
+#define SLOT_LOGO_H 52
+extern const u16 slot_mega[2704];
+#define SLOT_MEGA_W 52
+#define SLOT_MEGA_H 52
+extern const u16 slot_coin[2704];
+#define SLOT_COIN_W 52
+#define SLOT_COIN_H 52
+extern const u16 slot_chair[2704];
+#define SLOT_CHAIR_W 52
+#define SLOT_CHAIR_H 52
+extern const u16 slot_red[2704];
+#define SLOT_RED_W 52
+#define SLOT_RED_H 52
+extern const u16 slot_green[2704];
+#define SLOT_GREEN_W 52
+#define SLOT_GREEN_H 52
+extern const u16 slot_blue[2704];
+#define SLOT_BLUE_W 52
+#define SLOT_BLUE_H 52
 extern const u16 font_rows[1330];
 #define FONT_H 14
 extern const unsigned char font_w[95];
