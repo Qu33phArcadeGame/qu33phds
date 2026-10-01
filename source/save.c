@@ -1,11 +1,13 @@
 // save.c — the save file, coins, achievements, high scores, themes
 #include "qu.h"
 #include <fat.h>
+#include <stddef.h>
 
 SaveData sv;
 int saveOK;
 #define SAVE_MAGIC 0x51553350   // "QU3P"
-#define SAVE_VERSION 1
+#define SAVE_VERSION 2
+#define SAVE_V1_SIZE offsetof(SaveData, arcadeBest)   // version 1 files end where the arcade fields begin
 
 // ── the website's shop, achievements and themes ───────────────────────────
 const char *SHOP_NAME[SH_COUNT] = { "Coin Doubler", "Coin Magnet", "Extra Time", "Mega Boost", "Peef Guard",
@@ -47,8 +49,12 @@ void saveInit(void) {
     for (int i = 0; i < 2 && !saveOK; i++) {
         FILE *f = fopen(PATHS[i], "rb");
         if (f) {
-            SaveData t;
-            if (fread(&t, 1, sizeof t, f) == sizeof t && t.magic == SAVE_MAGIC && t.version == SAVE_VERSION) sv = t;
+            SaveData t; memset(&t, 0, sizeof t);
+            size_t n = fread(&t, 1, sizeof t, f);
+            if (t.magic == SAVE_MAGIC && ((t.version == SAVE_VERSION && n == sizeof t) || (t.version == 1 && n >= SAVE_V1_SIZE))) {
+                if (t.version == 1) memset((char *)&t + SAVE_V1_SIZE, 0, sizeof t - SAVE_V1_SIZE);   // keep all v1 progress
+                sv = t; sv.version = SAVE_VERSION;
+            }
             fclose(f); path = PATHS[i]; saveOK = 1;
         } else {
             f = fopen(PATHS[i], "wb");                  // first run: create it
@@ -56,10 +62,13 @@ void saveInit(void) {
         }
     }
 }
+// Writing to the SD card takes a noticeable moment on a real DS, and screens save as you leave
+// them, so only write when something actually changed since the last write.
+static SaveData lastSaved; static int haveSaved;
 void saveWrite(void) {
-    if (!saveOK) return;
+    if (!saveOK || (haveSaved && !memcmp(&lastSaved, &sv, sizeof sv))) return;
     FILE *f = fopen(path, "wb");
-    if (f) { fwrite(&sv, 1, sizeof sv, f); fclose(f); }
+    if (f) { fwrite(&sv, 1, sizeof sv, f); fclose(f); lastSaved = sv; haveSaved = 1; }
 }
 void resetHighScores(void) { memset(sv.high1p, 0, sizeof sv.high1p); memset(sv.highOly, 0, sizeof sv.highOly); saveWrite(); }
 void resetEverything(void) { defaults(); applyTheme(); saveWrite(); }
@@ -116,21 +125,26 @@ void highInsert(HighEntry *l, const char *name, int s2) {
     saveWrite();
 }
 
-// ── themes: colour-graded copies of the field photo ───────────────────────
+// ── themes: the field is stored as 256 colours + an index per pixel (half the size of a
+//    full-colour photo). A theme only has to recolour those 256 colours; the strip the game
+//    scrolls is then rebuilt once, so drawing a frame costs exactly what it did before.
 static u16 fieldTint[FIELD_W * FIELD_H];
-const u16 *fieldPix = field;
+const u16 *fieldPix = fieldTint;
 static int clamp31(int v) { return v < 0 ? 0 : v > 31 ? 31 : v; }
 void applyTheme(void) {
-    int t = sv.theme;
-    if (t <= 1) { fieldPix = field; return; }        // REALISTIC and CARTOON use the photo as-is
-    for (int i = 0; i < FIELD_W * FIELD_H; i++) {
-        u16 p = field[i]; int r = p & 31, g = (p >> 5) & 31, b = (p >> 10) & 31, l = (r * 3 + g * 5 + b * 2) / 10;
-        int R, G, B;
-        if (t == 2)      { R = r * 45 / 100;      G = g * 50 / 100;      B = b * 80 / 100 + 3; }   // NIGHT
-        else if (t == 3) { R = r + 4;             G = g * 75 / 100 + 1;  B = b * 55 / 100; }       // SUNSET
-        else if (t == 4) { R = l * 60 / 100 + (b > r ? 2 : 9); G = g * 40 / 100; B = b * 70 / 100 + 9; }   // NEON
-        else             { R = l * 11 / 10 + 4;   G = l * 9 / 10 + 2;    B = l * 45 / 100; }       // GOLDEN
-        fieldTint[i] = clamp31(R) | (clamp31(G) << 5) | (clamp31(B) << 10) | 0x8000;
-    }
-    fieldPix = fieldTint;
+    int t = sv.theme; u16 pal[256];
+    for (int i = 0; i < 256; i++) pal[i] = t <= 1 ? (field_pal[i] | 0x8000) : themeTint(field_pal[i], t);   // REALISTIC & CARTOON: photo as-is
+    for (int i = 0; i < FIELD_W * FIELD_H; i++) fieldTint[i] = pal[field[i]];
+    arcadeThemeChanged();
+}
+u16 themeTint(u16 p, int t) {
+    int r = p & 31, g = (p >> 5) & 31, b = (p >> 10) & 31, l = (r * 3 + g * 5 + b * 2) / 10;
+    int R, G, B;
+    if (t <= 0)      return p | 0x8000;                                                     // REALISTIC
+    else if (t == 1) { int c = (l - 16) * 12 / 10 + 16; R = G = B = c; }                    // CARTOON (grey, a touch more contrast)
+    else if (t == 2) { R = r * 45 / 100;      G = g * 50 / 100;      B = b * 80 / 100 + 3; }   // NIGHT
+    else if (t == 3) { R = r + 4;             G = g * 75 / 100 + 1;  B = b * 55 / 100; }       // SUNSET
+    else if (t == 4) { R = l * 60 / 100 + (b > r ? 2 : 9); G = g * 40 / 100; B = b * 70 / 100 + 9; }   // NEON
+    else             { R = l * 11 / 10 + 4;   G = l * 9 / 10 + 2;    B = l * 45 / 100; }       // GOLDEN
+    return clamp31(R) | (clamp31(G) << 5) | (clamp31(B) << 10) | 0x8000;
 }

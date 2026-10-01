@@ -1,6 +1,7 @@
 #pragma once
 #include <nds.h>
-extern const u16 field[268032];
+extern const u16 field_pal[256];
+extern const u8 field[268032];
 #define FIELD_W 256
 #define FIELD_H 1047
 extern const u16 mk_green[3364];
@@ -63,42 +64,55 @@ extern const u16 slot_blue[2704];
 extern const u16 font_rows[1330];
 #define FONT_H 14
 extern const unsigned char font_w[95];
-extern const signed char snd_vertical1[36520];
-#define SND_VERTICAL1_LEN 36520
+extern const u8 snd_vertical1[18268];
+#define SND_VERTICAL1_LEN 18268
 #define SND_VERTICAL1_RATE 16000
-extern const signed char snd_vertical2[33792];
-#define SND_VERTICAL2_LEN 33792
+#define SND_VERTICAL1_FRAMES 136
+extern const u8 snd_vertical2[16900];
+#define SND_VERTICAL2_LEN 16900
 #define SND_VERTICAL2_RATE 16000
-extern const signed char snd_vertical3[36520];
-#define SND_VERTICAL3_LEN 36520
+#define SND_VERTICAL2_FRAMES 126
+extern const u8 snd_vertical3[18268];
+#define SND_VERTICAL3_LEN 18268
 #define SND_VERTICAL3_RATE 16000
-extern const signed char snd_vertical4[40960];
-#define SND_VERTICAL4_LEN 40960
+#define SND_VERTICAL3_FRAMES 136
+extern const u8 snd_vertical4[20484];
+#define SND_VERTICAL4_LEN 20484
 #define SND_VERTICAL4_RATE 16000
-extern const signed char snd_horizontal1[56320];
-#define SND_HORIZONTAL1_LEN 56320
+#define SND_VERTICAL4_FRAMES 153
+extern const u8 snd_horizontal1[28164];
+#define SND_HORIZONTAL1_LEN 28164
 #define SND_HORIZONTAL1_RATE 16000
-extern const signed char snd_horizontal2[80896];
-#define SND_HORIZONTAL2_LEN 80896
+#define SND_HORIZONTAL1_FRAMES 211
+extern const u8 snd_horizontal2[40452];
+#define SND_HORIZONTAL2_LEN 40452
 #define SND_HORIZONTAL2_RATE 16000
-extern const signed char snd_angled1[34816];
-#define SND_ANGLED1_LEN 34816
+#define SND_HORIZONTAL2_FRAMES 303
+extern const u8 snd_angled1[17412];
+#define SND_ANGLED1_LEN 17412
 #define SND_ANGLED1_RATE 16000
-extern const signed char snd_angled2[38912];
-#define SND_ANGLED2_LEN 38912
+#define SND_ANGLED1_FRAMES 130
+extern const u8 snd_angled2[19460];
+#define SND_ANGLED2_LEN 19460
 #define SND_ANGLED2_RATE 16000
-extern const signed char snd_verticalpeef1[32084];
-#define SND_VERTICALPEEF1_LEN 32084
+#define SND_ANGLED2_FRAMES 145
+extern const u8 snd_verticalpeef1[16048];
+#define SND_VERTICALPEEF1_LEN 16048
 #define SND_VERTICALPEEF1_RATE 16000
-extern const signed char snd_horizontalpeef1[53928];
-#define SND_HORIZONTALPEEF1_LEN 53928
+#define SND_VERTICALPEEF1_FRAMES 120
+extern const u8 snd_horizontalpeef1[26972];
+#define SND_HORIZONTALPEEF1_LEN 26972
 #define SND_HORIZONTALPEEF1_RATE 16000
-extern const signed char snd_angledpeef1[42664];
-#define SND_ANGLEDPEEF1_LEN 42664
+#define SND_HORIZONTALPEEF1_FRAMES 202
+extern const u8 snd_angledpeef1[21340];
+#define SND_ANGLEDPEEF1_LEN 21340
 #define SND_ANGLEDPEEF1_RATE 16000
-extern const signed char snd_plop[2048];
-#define SND_PLOP_LEN 2048
+#define SND_ANGLEDPEEF1_FRAMES 160
+extern const u8 snd_plop[1028];
+#define SND_PLOP_LEN 1028
 #define SND_PLOP_RATE 16000
-extern const signed char snd_music[450000];
-#define SND_MUSIC_LEN 450000
+#define SND_PLOP_FRAMES 7
+extern const u8 snd_music[225004];
+#define SND_MUSIC_LEN 225004
 #define SND_MUSIC_RATE 10000
+#define SND_MUSIC_FRAMES 2700

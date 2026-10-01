@@ -20,7 +20,9 @@
 
 // ── screens ───────────────────────────────────────────────────────────────
 enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, S_HIGHS,
-       S_SETTINGS, S_THEMES, S_SLOT, S_PLINKO, S_OLY_SELECT, S_OLY_BRACKET, S_NAME };
+       S_SETTINGS, S_THEMES, S_SLOT, S_PLINKO, S_OLY_SELECT, S_OLY_BRACKET, S_NAME,
+       S_ARCADE, S_MINI_MENU, S_MINI, S_MINI_PAUSE, S_MINI_OVER,
+       S_BALL_MENU, S_BALL, S_BALL_PAUSE, S_BALL_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -38,6 +40,10 @@ typedef struct {
     u32 themesOwned; int theme;
     int musicOn, sfxOn, twoRounds, timer1p, timer2p, orient;
     char name[9];
+    // ── added in save version 2 (the arcade). Older saves load untouched; these start at 0.
+    int arcadeBest[16], arcadePlays[16];     // one slot per arcade game (see ARC_* in arcade.c)
+    int ballBest[3];                         // Qu33ph-Ball: best on each machine (was spare room, so old saves read 0)
+    u32 spare[13];                           // room to grow without another version bump
 } SaveData;
 extern SaveData sv;
 extern int saveOK;               // 1 if the microSD card can be written
@@ -72,7 +78,8 @@ void highInsert(HighEntry *list, const char *name, int score2);
 extern const char *THEME_NAME[THEME_COUNT];
 #define THEME_COST 50
 void applyTheme(void);           // rebuilds the tinted field for the current theme
-extern const u16 *fieldPix;      // the field strip the game draws (tinted per theme)
+u16  themeTint(u16 p, int t);    // one pixel through theme t's colour grade
+extern const u16 *fieldPix;      // the field strip the game draws, built from the 256-colour photo per theme
 
 // ── drawing (draw.c) ──────────────────────────────────────────────────────
 extern u16 bufTop[SW * SH], bufBot[SW * SH];
@@ -81,6 +88,11 @@ extern int gClipLo, gClipHi;
 void grect(int x, int gy, int w, int h, u16 c);
 void blitRot(const u16 *spr, int w, int h, int cx, int cy, float ang);
 void blit(u16 *buf, const u16 *spr, int w, int h, int x, int y);
+void blitRotScale(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale);
+void gdark(int x, int gy);
+void drawIndexed(const u8 *idx, const u16 *pal);   // both screens from a 256-colour picture
+void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad);
+void powerMarker(int x0, int gy0, float ux, float uy, float len, float power);
 void rect(u16 *buf, int x, int y, int w, int h, u16 c);
 int  textW(const char *t, int sc);
 void text(u16 *buf, int x, int y, const char *t, u16 col, int sc);
@@ -91,7 +103,7 @@ void box(u16 *buf, int x, int y, int w, int h, u16 fill, u16 edge);
 void scoreStr(char *o, int doubled);
 void drawFlag(u16 *buf, int x, int y, int w, int h, int nation);
 void coinCount(u16 *buf, int x, int y);
-float fsqrt(float v); float fabsf_(float v); float fsin(float a); float fcos(float a); float frand(void);
+float fsqrt(float v); float fatan2r(float y, float x); float fabsf_(float v); float fsin(float a); float fcos(float a); float frand(void);
 
 // ── buttons: drawn + navigated the same way on every screen ───────────────
 typedef struct { int x, y, w, h; char label[28]; u16 col; int dim; } Btn;
@@ -101,6 +113,18 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void);
+enum { MUS_MAIN, MUS_MINI, MUS_BALL };
+void musicSet(int track);        // switch tracks (restarts only if it changes)
+void musicTick(void);            // once per frame: loops the ADPCM tracks
+void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
+
+// ── game packs (pak.c): each arcade game's art & sound lives in its own file inside the
+//    .nds (NitroFS) and is loaded only while you're in that game, so adding games doesn't
+//    eat into the DS's 4 MB of memory.
+extern const u8 *arcPak;         // the loaded pack (the assets_<game>.h macros point into it)
+int  pakUse(const char *name, u32 size, u32 id);   // 1 = ready; 0 = couldn't load (see pakErr)
+int  pakIs(const char *name);
+extern int pakErr;               // 1 can't open the cartridge's files, 2 file missing, 3 old/mismatched file
 
 // ── the match (game.c) ────────────────────────────────────────────────────
 extern int score2[2], player, p2Round, frameCount, roundFrames, totalFrames, suddenDeath;
@@ -129,6 +153,22 @@ void drawToast(void);
 
 // name entry
 void nameEntry(int returnScreen, HighEntry *list, int score2);
+
+// ── the arcade (arcade.c) ─────────────────────────────────────────────────
+void drawArcade(void); void inputArcade(void);
+void drawMiniMenu(void); void inputMiniMenu(void);
+void drawMini(void); void inputMini(void); void updateMini(void);
+void drawMiniOver(void); void inputMiniOver(void);
+void arcadeThemeChanged(void);
+enum { ARC_MINI, ARC_BALL, ARC_FIDGET, ARC_BOWLING, ARC_STACK, ARC_FLIP, ARC_DOZER, ARC_JUMP, ARC_PINBALL, ARC_COUNT };
+void miniThemeChanged(void);
+// Qu33ph-Ball (ball.c)
+int  ballEnter(void);            // loads ball.pak; 0 if it couldn't
+void ballThemeChanged(void);
+void drawBallMenu(void); void inputBallMenu(void);
+void drawBall(void); void inputBall(void); void updateBall(void);
+void drawBallOver(void); void inputBallOver(void);
+extern int gStip;                // 1 = draw sprites see-through (every other pixel)
 
 // this frame's input (set once per frame in main.c)
 extern int kDown, kHeld, kUp, tX, tY;

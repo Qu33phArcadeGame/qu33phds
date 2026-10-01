@@ -1,85 +1,166 @@
 // draw.c — screens, sprites, text, buttons, flags
 #include "qu.h"
 
-u16 bufTop[SW * SH], bufBot[SW * SH];
+u16 bufTop[SW * SH] __attribute__((aligned(32))), bufBot[SW * SH] __attribute__((aligned(32)));
 
 // ── maths (the DS has no floating-point hardware: keep these light) ──────
-float fsqrt(float v) { if (v <= 0) return 0; float x = v > 1 ? v : 1; for (int i = 0; i < 12; i++) x = 0.5f * (x + v / x); return x; }
+float fsqrt(float v) {                         // bit-trick first guess + 3 Newton steps (was 12)
+    if (v <= 0) return 0;
+    union { float f; u32 i; } u = { v }; u.i = 0x1FBD1DF5 + (u.i >> 1);
+    float x = u.f; x = 0.5f * (x + v / x); x = 0.5f * (x + v / x); return 0.5f * (x + v / x);
+}
 float fabsf_(float v) { return v < 0 ? -v : v; }
 static float wrapPi(float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; }
 float fsin(float a) { a = wrapPi(a); float y = 1.2732395f * a - 0.4052847f * a * fabsf_(a); return 0.225f * (y * fabsf_(y) - y) + y; }
 float fcos(float a) { return fsin(a + 1.5707963f); }
 float frand(void) { return (rand() % 1000) / 1000.0f; }
+float fatan2r(float y, float x) {               // radians
+    float ax = fabsf_(x), ay = fabsf_(y);
+    if (ax < 1e-6f && ay < 1e-6f) return 0;
+    float a = (ax < ay ? ax / ay : ay / ax), s = a * a;
+    float r = ((-0.0464964749f * s + 0.15931422f) * s - 0.327622764f) * s * a + a;
+    if (ay > ax) r = 1.57079637f - r;
+    if (x < 0) r = 3.14159274f - r;
+    return y < 0 ? -r : r;
+}
 
 // ── both screens as one tall canvas: gy 0-191 top, 192-383 bottom ────────
 int gClipLo = 0, gClipHi = 2 * SH;           // rows of the tall canvas a drawing pass may touch
+static inline u16 *growp(int gy) { return gy < SH ? &bufTop[gy * SW] : &bufBot[(gy - SH) * SW]; }
 void gpx(int x, int gy, u16 c) {
     if ((unsigned)x >= SW || gy < gClipLo || gy >= gClipHi) return;
-    if ((unsigned)gy < SH) bufTop[gy * SW + x] = c;
-    else if ((unsigned)(gy - SH) < SH) bufBot[(gy - SH) * SW + x] = c;
+    growp(gy)[x] = c;
 }
-void grect(int x, int gy, int w, int h, u16 c) { for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) gpx(x + i, gy + j, c); }
+void grect(int x, int gy, int w, int h, u16 c) {
+    int x0 = x < 0 ? 0 : x, x1 = x + w > SW ? SW : x + w;
+    for (int j = 0; j < h; j++) { int y = gy + j; if (y < gClipLo || y >= gClipHi || x0 >= x1) continue;
+        u16 *r = growp(y); for (int i = x0; i < x1; i++) r[i] = c; }
+}
+// the whole tall canvas from a 256-colour picture (arcade tables): 2 pixels per store
+void drawIndexed(const u8 *idx, const u16 *pal) {
+    u32 *d = (u32 *)bufTop; const u32 *s = (const u32 *)idx;
+    for (int half = 0; half < 2; half++, d = (u32 *)bufBot)
+        for (int i = 0; i < SW * SH / 4; i++) {
+            u32 q = *s++;
+            *d++ = pal[q & 255] | ((u32)pal[(q >> 8) & 255] << 16);
+            *d++ = pal[(q >> 16) & 255] | ((u32)pal[q >> 24] << 16);
+        }
+}
 
-// rotated sprite, whole-number maths only (16.16 fixed point) so it keeps 60 fps
-void blitRot(const u16 *spr, int w, int h, int cx, int cy, float ang) {
-    int ci = (int)(fcos(ang) * 65536.0f), si = (int)(fsin(ang) * 65536.0f);
-    int r = (int)(fsqrt((float)(w * w + h * h)) / 2) + 1;
+// rotated (and scaled) sprite, whole-number maths in the loop (16.16 fixed point). Only the
+// stretch of each row that actually lands inside the sprite is walked, and pixels are written
+// straight into the row instead of through gpx().
+int gStip;                                   // see-through: skip every other pixel (a cheap 50% fade)
+static void blitCore(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale) {
+    if (scale <= 0.01f) return;
+    float inv = 1.0f / scale;
+    int ci = (int)(fcos(ang) * inv * 65536.0f), si = (int)(fsin(ang) * inv * 65536.0f);
+    int r = (int)(fsqrt((float)(w * w + h * h)) * scale / 2) + 1;
+    int W = w << 16, H = h << 16;
     for (int dy = -r; dy <= r; dy++) {
-        int gy = cy + dy; if (gy < 0 || gy >= 2 * SH) continue;
+        int gy = cy + dy; if (gy < gClipLo || gy >= gClipHi) continue;
         int sxf = ci * (-r) + si * dy + (w << 15), syf = -si * (-r) + ci * dy + (h << 15);
-        for (int dx = -r; dx <= r; dx++, sxf += ci, syf -= si) {
-            int gx = cx + dx; if ((unsigned)gx >= SW) continue;
+        int a = -r, b = r;
+        // narrow [a,b] to where 0 <= sx < W and 0 <= sy < H (both are straight lines in dx)
+        #define NARROW(v0, dv, LIM) if (dv == 0) { if (v0 < 0 || v0 >= LIM) continue; } \
+            else { int lo, hi; if (dv > 0) { lo = (-(v0)) / dv - 1; hi = (LIM - 1 - (v0)) / dv + 1; } \
+                   else { lo = (LIM - 1 - (v0)) / dv - 1; hi = (-(v0)) / dv + 1; } \
+                   if (lo - r > a) a = lo - r; if (hi - r < b) b = hi - r; }
+        NARROW(sxf, ci, W) NARROW(syf, -si, H)
+        #undef NARROW
+        if (cx + a < 0) a = -cx;
+        if (cx + b > SW - 1) b = SW - 1 - cx;
+        if (a > b) continue;
+        u16 *row = growp(gy);
+        int k = a + r; sxf += ci * k; syf -= si * k;
+        for (int dx = a; dx <= b; dx++, sxf += ci, syf -= si) {
             int ix = sxf >> 16, iy = syf >> 16;
             if ((unsigned)ix >= (unsigned)w || (unsigned)iy >= (unsigned)h) continue;
             u16 p = spr[iy * w + ix];
-            if (p & 0x8000) gpx(gx, gy, p);
+            if ((p & 0x8000) && !(gStip && (((cx + dx) ^ gy) & 1))) row[cx + dx] = p;
         }
     }
 }
+void blitRot(const u16 *spr, int w, int h, int cx, int cy, float ang) { blitCore(spr, w, h, cx, cy, ang, 1.0f); }
+void blitRotScale(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale) { blitCore(spr, w, h, cx, cy, ang, scale); }
+// darken one pixel of the tall canvas (soft shadows)
+void gdark(int x, int gy) {
+    if ((unsigned)x >= SW || gy < gClipLo || gy >= gClipHi) return;
+    u16 *p = &growp(gy)[x];
+    *p = ((*p >> 1) & 0x3DEF) | 0x8000;
+}
 void blit(u16 *buf, const u16 *spr, int w, int h, int x, int y) {
-    for (int j = 0; j < h; j++) { int yy = y + j; if (yy < 0 || yy >= SH) continue;
-        for (int i = 0; i < w; i++) { int xx = x + i; if (xx < 0 || xx >= SW) continue; u16 p = spr[j * w + i]; if (p & 0x8000) buf[yy * SW + xx] = p; } }
+    int i0 = x < 0 ? -x : 0, i1 = x + w > SW ? SW - x : w;
+    for (int j = 0; j < h; j++) { int yy = y + j; if ((unsigned)yy >= SH) continue;
+        const u16 *s = &spr[j * w]; u16 *d = &buf[yy * SW + x];
+        for (int i = i0; i < i1; i++) { u16 p = s[i]; if (p & 0x8000) d[i] = p; } }
+}
+static void hfill(u16 *row, int x0, int x1, u16 c) {          // [x0, x1) already clipped
+    if (x0 >= x1) return;
+    if (x0 & 1) row[x0++] = c;
+    u32 cc = c | ((u32)c << 16), *d = (u32 *)&row[x0]; int n = (x1 - x0) >> 1;
+    while (n >= 4) { d[0] = cc; d[1] = cc; d[2] = cc; d[3] = cc; d += 4; n -= 4; }
+    while (n--) *d++ = cc;
+    if ((x1 - x0) & 1) row[x1 - 1] = c;
 }
 void rect(u16 *buf, int x, int y, int w, int h, u16 c) {
-    for (int j = 0; j < h; j++) { int yy = y + j; if ((unsigned)yy >= SH) continue;
-        for (int i = 0; i < w; i++) { int xx = x + i; if ((unsigned)xx < SW) buf[yy * SW + xx] = c; } }
+    int x0 = x < 0 ? 0 : x, x1 = x + w > SW ? SW : x + w, y0 = y < 0 ? 0 : y, y1 = y + h > SH ? SH : y + h;
+    for (int yy = y0; yy < y1; yy++) hfill(&buf[yy * SW], x0, x1, c);
 }
-void fillScreen(u16 *buf, u16 c) { for (int i = 0; i < SW * SH; i++) buf[i] = c; }
+void fillScreen(u16 *buf, u16 c) {
+    u32 cc = c | ((u32)c << 16), *d = (u32 *)buf;
+    for (int i = 0; i < SW * SH / 16; i++) { d[0] = cc; d[1] = cc; d[2] = cc; d[3] = cc; d[4] = cc; d[5] = cc; d[6] = cc; d[7] = cc; d += 8; }
+}
 void box(u16 *buf, int x, int y, int w, int h, u16 fill, u16 edge) {
-    for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) {
-        int xx = x + i, yy = y + j; if ((unsigned)xx >= SW || (unsigned)yy >= SH) continue;
-        int e = (i < 2 || j < 2 || i >= w - 2 || j >= h - 2);
-        buf[yy * SW + xx] = e ? edge : fill;
-    }
+    rect(buf, x, y, w, h, edge); rect(buf, x + 2, y + 2, w - 4, h - 4, fill);
 }
 
+// ── the website's marker shape (body + cap), used by buttons and the power marker ──
+// rounded-end inset for row j of an h-tall shape whose end has radius r
+static int inset(int j, int h, int r) {
+    int d = j < r ? r - j : (j >= h - r ? j - (h - 1 - r) : 0);
+    if (d <= 0) return 0;
+    int i = 0; while (i < r && (r - i) * (r - i) + d * d > r * r + r) i++;
+    return i;
+}
+// fill [x, x+w) x [y, y+h) with rounded left (rl) / right (rr) ends; row colour from grad[] or c
+static void shape(u16 *buf, int x, int y, int w, int h, int rl, int rr, const u16 *grad, u16 c) {
+    for (int j = 0; j < h; j++) { int yy = y + j; if ((unsigned)yy >= SH) continue;
+        int x0 = x + inset(j, h, rl), x1 = x + w - inset(j, h, rr);
+        if (x0 < 0) x0 = 0;
+        if (x1 > SW) x1 = SW;
+        hfill(&buf[yy * SW], x0, x1, grad ? grad[j * 32 / h] : c); }
+}
 // ── text (DejaVu Sans Bold glyphs from assets.c), dark outline for reading on photos
 int textW(const char *t, int sc) { int w = 0; for (; *t; t++) { int ch = *t; if (ch < 32 || ch > 126) ch = '?'; w += font_w[ch - 32] * sc; } return w; }
+// One pass per glyph row: the outline is the row's pixels spread one step left/right plus the
+// rows above and below, minus the letter itself, and only set bits are visited. (It used to be
+// five full passes over every bit of every row — the single biggest cost on menu screens.)
 static void glyphs(u16 *buf, int gyMode, int x, int y, const char *t, u16 col, int sc) {
     for (; *t; t++) {
         int ch = *t; if (ch < 32 || ch > 126) ch = '?';
         const u16 *rows = &font_rows[(ch - 32) * FONT_H];
-        for (int j = 0; j < FONT_H; j++) { u16 r = rows[j]; if (!r) continue;
-            for (int i = 0; i < 16; i++) if (r & (1 << i))
-                for (int a = 0; a < sc; a++) for (int b = 0; b < sc; b++) {
-                    int px = x + i * sc + a, py = y + j * sc + b;
-                    if (gyMode) gpx(px, py, col);
-                    else if ((unsigned)px < SW && (unsigned)py < SH) buf[py * SW + px] = col;
-                } }
+        for (int j = -1; j <= FONT_H; j++) {
+            u32 r = (j >= 0 && j < FONT_H) ? rows[j] : 0, up = j > 0 ? rows[j - 1] : 0, dn = j < FONT_H - 1 ? rows[j + 1] : 0;
+            u32 r2 = r << 1, out = ((r2 << 1) | (r2 >> 1) | (up << 1) | (dn << 1)) & ~r2, m = out | r2;   // bit i+1 = column i
+            if (!m) continue;
+            for (int b2 = 0; b2 < sc; b2++) {
+                int py = y + j * sc + b2;
+                u16 *row;
+                if (gyMode) { if (py < gClipLo || py >= gClipHi || py < 0 || py >= 2 * SH) continue; row = growp(py); }
+                else { if ((unsigned)py >= SH) continue; row = &buf[py * SW]; }
+                for (u32 mm = m; mm; mm &= mm - 1) {
+                    int i = __builtin_ctz(mm) - 1; u16 c = (r2 >> (i + 1)) & 1 ? col : BLACK;
+                    for (int a2 = 0; a2 < sc; a2++) { int px = x + i * sc + a2; if ((unsigned)px < SW) row[px] = c; }
+                }
+            }
+        }
         x += font_w[ch - 32] * sc;
     }
 }
-void text(u16 *buf, int x, int y, const char *t, u16 col, int sc) {
-    glyphs(buf, 0, x - 1, y, t, BLACK, sc); glyphs(buf, 0, x + 1, y, t, BLACK, sc);
-    glyphs(buf, 0, x, y - 1, t, BLACK, sc); glyphs(buf, 0, x, y + 1, t, BLACK, sc);
-    glyphs(buf, 0, x, y, t, col, sc);
-}
+void text(u16 *buf, int x, int y, const char *t, u16 col, int sc) { glyphs(buf, 0, x, y, t, col, sc); }
 void textC(u16 *buf, int y, const char *t, u16 col, int sc) { text(buf, (SW - textW(t, sc)) / 2, y, t, col, sc); }
-void gtext(int x, int gy, const char *t, u16 col, int sc) {
-    glyphs(0, 1, x - 1, gy, t, BLACK, sc); glyphs(0, 1, x + 1, gy, t, BLACK, sc);
-    glyphs(0, 1, x, gy - 1, t, BLACK, sc); glyphs(0, 1, x, gy + 1, t, BLACK, sc);
-    glyphs(0, 1, x, gy, t, col, sc);
-}
+void gtext(int x, int gy, const char *t, u16 col, int sc) { glyphs(0, 1, x, gy, t, col, sc); }
 void scoreStr(char *o, int doubled) {
     if (doubled < 0 && (doubled & 1)) sprintf(o, "-%d.5", (-doubled) / 2);
     else if (doubled & 1) sprintf(o, "%d.5", doubled / 2);
@@ -91,14 +172,61 @@ void coinCount(u16 *buf, int x, int y) {
 }
 
 // ── buttons ───────────────────────────────────────────────────────────────
-void drawBtns(u16 *buf, Btn *b, int n, int sel) {
-    for (int i = 0; i < n; i++) {
-        int on = (i == sel);
-        u16 edge = b[i].dim ? GREY : (on ? YELLOW : WHITE);
-        box(buf, b[i].x, b[i].y, b[i].w, b[i].h, on ? COL(6, 6, 6) : BLACK, edge);
-        u16 c = b[i].col ? b[i].col : (b[i].dim ? GREY : (on ? YELLOW : WHITE));
-        text(buf, b[i].x + (b[i].w - textW(b[i].label, 1)) / 2, b[i].y + (b[i].h - FONT_H) / 2 + 1, b[i].label, c, 1);
+// The website's marker buttons: a dark gradient body with a white outline and a rounded cap
+// on the left end, like a marker pen. The highlighted one gets a gold outline and sinks 2 px
+// while it's held, as the website's buttons press down.
+static u16 BTN_GRAD[32];
+static void btnGrad(void) {
+    if (BTN_GRAD[0]) return;
+    for (int i = 0; i < 32; i++) {                         // #3c3c3c -> #161616 (46%) -> #000
+        int v = i < 15 ? 7 - i * 5 / 15 : 2 - (i - 15) * 2 / 17;
+        BTN_GRAD[i] = COL(v, v, v);
     }
+}
+void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad) {
+    int cap = h * 45 / 100; if (cap < 10) cap = 10;
+    int rc = h / 2 - 1, rb = h / 4;
+    shape(buf, x, y, w, h, rc, rb, 0, edge);                                      // outline
+    shape(buf, x + 2, y + 2, cap - 3, h - 4, rc - 2, 1, grad, 0);                 // the cap
+    shape(buf, x + cap + 1, y + 2, w - cap - 3, h - 4, 1, rb - 2 > 1 ? rb - 2 : 1, grad, 0);   // the body
+    rect(buf, x + 3, y + 2, cap - 5, 1, COL(13, 13, 13));                         // the shine along the top
+    rect(buf, x + cap + 2, y + 2, w - cap - 6, 1, COL(13, 13, 13));
+}
+void drawBtns(u16 *buf, Btn *b, int n, int sel) {
+    btnGrad();
+    for (int i = 0; i < n; i++) {
+        int on = (i == sel), dn = on && (kHeld & KEY_A) ? 2 : 0;
+        u16 edge = b[i].dim ? GREY : (on ? COL(31, 26, 4) : WHITE);
+        int cap = b[i].h * 45 / 100; if (cap < 10) cap = 10;
+        markerShape(buf, b[i].x, b[i].y + dn, b[i].w, b[i].h, edge, BTN_GRAD);
+        u16 c = b[i].col ? b[i].col : (b[i].dim ? GREY : (on ? YELLOW : WHITE));
+        int bx = b[i].x + cap, bw = b[i].w - cap, tw = textW(b[i].label, 1);
+        if (tw > bw - 4) { bx = b[i].x + 2; bw = b[i].w - 4; }                  // long labels may run over the cap
+        text(buf, bx + (bw - tw) / 2, b[i].y + dn + (b[i].h - FONT_H) / 2 + 1, b[i].label, c, 1);
+    }
+}
+// The power marker: a marker pointing where the throw goes, growing with power and filling
+// from white through gold to red. (x0,gy0) is the back of the cap, (ux,uy) the direction.
+void powerMarker(int x0, int gy0, float ux, float uy, float len, float power) {
+    static u16 spr[200 * 14];
+    int L = (int)len; if (L < 24) L = 24; if (L > 200) L = 200;
+    int H = 14, cap = 10, nib = 9;
+    int pr = (int)(power * 31);
+    u16 fill = power <= 0 ? COL(5, 5, 5) : COL(31, 31 - pr * 2 / 3, pr < 16 ? 31 - pr * 2 : 0);
+    btnGrad();
+    for (int j = 0; j < H; j++) for (int i = 0; i < L; i++) {
+        u16 c = 0; int dy = j - H / 2; if (dy < 0) dy = -dy - 1;
+        if (i >= L - nib) {                                  // the nib: a point
+            int half = (L - 1 - i) * (H / 2) / nib;
+            if (dy <= half) c = dy >= half - 1 ? WHITE : (power > 0 ? fill : COL(10, 10, 10));
+            if (i >= L - 3 && dy <= 1) c = COL(31, 28, 6);
+        } else if (i < cap) {                                // the cap, rounded at the back
+            int in = inset(j, H, 6); if (i >= in) c = (i == in || j < 2 || j >= H - 2 || i == cap - 1) ? WHITE : BTN_GRAD[j * 32 / H];
+        } else c = (j < 2 || j >= H - 2) ? WHITE : (power > 0 && (i - cap) < (L - nib - cap) * power + 1 ? fill : BTN_GRAD[j * 32 / H]);
+        spr[j * L + i] = c ? (c | 0x8000) : 0;
+    }
+    float cx = x0 + ux * L / 2, cy = gy0 + uy * L / 2;
+    blitCore(spr, L, H, (int)cx, (int)cy, fatan2r(uy, ux), 1.0f);
 }
 // D-pad moves the highlight (cols = buttons per row), A presses it, or tap a button
 int btnInput(Btn *b, int n, int *sel, int cols) {

@@ -227,7 +227,7 @@ static void drop(void) {
         for (int i = 0; i < 3; i++) if (balls[i].live) return;
         plinkoEnter(); return;
     }
-    if (!paid) { if (sv.coins < 5) return; sv.coins -= 5; paid = 1; saveWrite(); }
+    if (!paid) { if (sv.coins < 5) return; sv.coins -= 5; paid = 1; }
     Ball *b = &balls[dropIdx++];
     b->x = aimX; b->y = 10; b->vx = (frand() - 0.5f) * 0.6f; b->vy = 0; b->live = 1; b->done = 0;
     b->rot = 1.5708f; b->spin = (frand() - 0.5f) * 0.1f;
@@ -237,7 +237,13 @@ void updatePlinko(void) {
         Ball *b = &balls[i]; if (!b->live) continue;
         b->vy += 0.16f; b->x += b->vx; b->y += b->vy; b->vx *= 0.995f;
         b->rot += b->spin; b->spin *= 0.985f;
-        for (int r = 0; r < PEG_ROWS; r++) for (int c = 0; c < pegCount(r); c++) {
+        // only the peg rows the marker can touch (it's within 9 px of a peg's row), and only the
+        // two pegs either side of it in that row: 4 checks instead of 52
+        int rn = (int)((b->y - 34 + 9) / 18);
+        for (int r = rn - 1; r <= rn; r++) { if (r < 0 || r >= PEG_ROWS) continue;
+            int pdy = (int)b->y - pegY(r); if (pdy > 9 || pdy < -9) continue;
+            int c0 = (int)((b->x - 18 - (r % 2 ? 16 : 0)) / 32);
+            for (int c = c0; c <= c0 + 1; c++) { if (c < 0 || c >= pegCount(r)) continue;
             float dx = b->x - pegX(r, c), dy = b->y - pegY(r), d2 = dx * dx + dy * dy;
             if (d2 < 81.0f && d2 > 0.01f) {                               // ball r 6 + peg r 3
                 float d = fsqrt(d2), nx = dx / d, ny = dy / d, rel = b->vx * nx + b->vy * ny;
@@ -249,13 +255,14 @@ void updatePlinko(void) {
                 if (b->spin > 0.4f) b->spin = 0.4f;
                 if (b->spin < -0.4f) b->spin = -0.4f;
             }
-        }
+        } }
         if (b->x < 6) { b->x = 6; b->vx = -b->vx * 0.5f; }
         if (b->x > 250) { b->x = 250; b->vx = -b->vx * 0.5f; }
         if (b->y > 172) {
             int bin = (int)(b->x * 7 / 256); if (bin < 0) bin = 0; if (bin > 6) bin = 6;
             b->live = 0; b->done = 1; b->y = 178;
-            addCoins(BINS[bin]); plWin += BINS[bin]; sfxPlop(); saveWrite();
+            addCoins(BINS[bin]); plWin += BINS[bin]; sfxPlop();
+            if (i == 2) saveWrite();       // once per set (writing to the SD card takes a moment), not per marker
         }
     }
 }

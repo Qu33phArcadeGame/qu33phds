@@ -1,5 +1,7 @@
 // game.c — the Qu33ph match: the website's rules & physics, shop effects, themes
 #include "qu.h"
+#include "assets_mini.h"
+#include "assets_ball.h"
 
 // ── the website's world (420 x 900) and the realistic field's layout ──────
 #define WORLD_H      900.0f
@@ -15,7 +17,7 @@
 #define REDDOT_Y     159.8f
 #define TOUCH_DIST   45.0f
 #define VIEW_H       (384.0f / K)
-#define SWIPE_GAIN   2.2f
+#define SWIPE_GAIN   2.5f
 
 typedef struct { float x, y, vx, vy, curve, rot, spin, life; int stopped, fallen, armed, deducted, megaTriggered, col; float tx[10], ty[10]; int tn; } Marker;
 static Marker mk[3];
@@ -51,23 +53,47 @@ static void confetti(float x, float y) {
 }
 
 // ── sound ─────────────────────────────────────────────────────────────────
+// Everything is IMA-ADPCM now (4 bits a sample, played natively by the DS sound hardware).
 static int musicCh = -1;
-static void play(const signed char *d, int len, int rate, int vol) { if (sv.sfxOn) soundPlaySample(d, SoundFormat_8Bit, len, rate, vol, 64, false, 0); }
+static void play(const u8 *d, int len, int vol) { playAdpcm(d, len, 16000, vol); }
 void sfxThrow(int o) {
     int r = rand();
-    if (o == 0) { const signed char *s[4] = { snd_vertical1, snd_vertical2, snd_vertical3, snd_vertical4 };
-                  int l[4] = { SND_VERTICAL1_LEN, SND_VERTICAL2_LEN, SND_VERTICAL3_LEN, SND_VERTICAL4_LEN }; play(s[r % 4], l[r % 4], 16000, 110); }
-    else if (o == 1) { if (r & 1) play(snd_angled1, SND_ANGLED1_LEN, 16000, 110); else play(snd_angled2, SND_ANGLED2_LEN, 16000, 110); }
-    else { if (r & 1) play(snd_horizontal1, SND_HORIZONTAL1_LEN, 16000, 110); else play(snd_horizontal2, SND_HORIZONTAL2_LEN, 16000, 110); }
+    if (o == 0) { const u8 *s[4] = { snd_vertical1, snd_vertical2, snd_vertical3, snd_vertical4 };
+                  int l[4] = { SND_VERTICAL1_LEN, SND_VERTICAL2_LEN, SND_VERTICAL3_LEN, SND_VERTICAL4_LEN }; play(s[r % 4], l[r % 4], 110); }
+    else if (o == 1) { if (r & 1) play(snd_angled1, SND_ANGLED1_LEN, 110); else play(snd_angled2, SND_ANGLED2_LEN, 110); }
+    else { if (r & 1) play(snd_horizontal1, SND_HORIZONTAL1_LEN, 110); else play(snd_horizontal2, SND_HORIZONTAL2_LEN, 110); }
 }
 void sfxPeef(int o) {
-    if (o == 0) play(snd_verticalpeef1, SND_VERTICALPEEF1_LEN, 16000, 120);
-    else if (o == 1) play(snd_angledpeef1, SND_ANGLEDPEEF1_LEN, 16000, 120);
-    else play(snd_horizontalpeef1, SND_HORIZONTALPEEF1_LEN, 16000, 120);
+    if (o == 0) play(snd_verticalpeef1, SND_VERTICALPEEF1_LEN, 120);
+    else if (o == 1) play(snd_angledpeef1, SND_ANGLEDPEEF1_LEN, 120);
+    else play(snd_horizontalpeef1, SND_HORIZONTALPEEF1_LEN, 120);
 }
-void sfxPlop(void) { play(snd_plop, SND_PLOP_LEN, 16000, 100); }
-void musicStart(void) { if (musicCh >= 0 || !sv.musicOn) return; musicCh = soundPlaySample(snd_music, SoundFormat_8Bit, SND_MUSIC_LEN, SND_MUSIC_RATE, 70, 64, true, 0); }
+void sfxPlop(void) { play(snd_plop, SND_PLOP_LEN, 100); }
+// One track plays at a time: the main game's (built in) or the open arcade game's (in its pack).
+// Each is restarted by musicTick when it reaches its end.
+static int musicTrack = MUS_MAIN, musicT;
+static int trackData(int t, const u8 **d, int *len, int *rate, int *frames) {
+    if (t == MUS_MINI && pakIs(MINI_PAK)) { *d = ms_music; *len = MS_MUSIC_LEN; *rate = MS_MUSIC_RATE; *frames = MS_MUSIC_FRAMES; return 1; }
+    if (t == MUS_BALL && pakIs(BALL_PAK)) { *d = bs_music; *len = BS_MUSIC_LEN; *rate = BS_MUSIC_RATE; *frames = BS_MUSIC_FRAMES; return 1; }
+    if (t == MUS_MAIN) { *d = snd_music; *len = SND_MUSIC_LEN; *rate = SND_MUSIC_RATE; *frames = SND_MUSIC_FRAMES; return 1; }
+    return 0;
+}
+static int musicFrames;
+void musicStart(void) {
+    if (musicCh >= 0 || !sv.musicOn) return;
+    const u8 *d; int len, rate;
+    if (!trackData(musicTrack, &d, &len, &rate, &musicFrames)) return;
+    musicCh = soundPlaySample(d, SoundFormat_ADPCM, len, rate, 70, 64, false, 0); musicT = 0;
+}
 void musicStop(void) { if (musicCh >= 0) { soundKill(musicCh); musicCh = -1; } }
+void musicSet(int t) { if (t != musicTrack) { musicStop(); musicTrack = t; } musicStart(); }
+void musicTick(void) { if (musicCh >= 0 && ++musicT >= musicFrames) { musicStop(); musicStart(); } }
+void playAdpcm(const u8 *d, int len, int rate, int vol) {
+    if (!sv.sfxOn) return;
+    if (vol > 127) vol = 127;
+    if (vol < 0) vol = 0;
+    soundPlaySample(d, SoundFormat_ADPCM, len, rate, vol, 64, false, 0);
+}
 
 // ── maths ─────────────────────────────────────────────────────────────────
 static float dist(float ax, float ay, float bx, float by) { return fsqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by)); }
@@ -214,8 +240,12 @@ void matchUpdate(void) {
 }
 
 // ── aiming with buttons ───────────────────────────────────────────────────
+// Every throw is measured the same way, so the first marker of a set flies exactly like the
+// others: the swipe's strength is the bigger of its total length and its speed over the last
+// few frames (a quick flick counts fully), and a glitchy first touch sample is ignored.
+// A full button charge (or a two-thirds-height swipe) reaches the back wall.
 static float aimAng = -1.5708f, power; static int charging, chargeT, ph;
-static int swiping, sx0, sy0, sx1, sy1;
+static int swiping, sx0, sy0, sx1, sy1, hx[4], hy[4], hn;
 void matchInput(int down, int held, int up, int tx, int ty) {
     if (down & KEY_L) orient = (orient + 2) % 3;
     if (down & KEY_R) orient = (orient + 1) % 3;
@@ -225,17 +255,26 @@ void matchInput(int down, int held, int up, int tx, int ty) {
     if (aimAng > -0.55f) aimAng = -0.55f;
     if (down & KEY_A) { charging = 1; power = 0; ph = 0; }
     if (charging) {
-        ph++; float p = (ph % 100) / 50.0f; power = p < 1 ? p : 2 - p;
+        ph++; float p = (ph % 64) / 32.0f; power = p < 1 ? p : 2 - p;    // full in about half a second
         chargeT = 90;
         if (down & KEY_B) charging = 0;
-        else if (up & KEY_A) { charging = 0; float pw = 70 + power * 160; throwMarker(fcos(aimAng) * pw, fsin(aimAng) * pw); }
+        else if (up & KEY_A) { charging = 0; float pw = 80 + power * 190; throwMarker(fcos(aimAng) * pw, fsin(aimAng) * pw); }
     }
     if (chargeT > 0 && !charging) chargeT--;
-    if (down & KEY_TOUCH) { swiping = 1; sx0 = sx1 = tx; sy0 = sy1 = ty; }
-    if (swiping && (held & KEY_TOUCH)) { sx1 = tx; sy1 = ty; }
+    if (down & KEY_TOUCH) { swiping = 1; sx0 = sx1 = tx; sy0 = sy1 = ty; hn = 0; }
+    if (swiping && (held & KEY_TOUCH)) {
+        if (hn == 0 && (tx - sx0) * (tx - sx0) + (ty - sy0) * (ty - sy0) > 3600) { sx0 = tx; sy0 = ty; }   // bad first sample
+        sx1 = tx; sy1 = ty;
+        for (int k = 3; k > 0; k--) { hx[k] = hx[k - 1]; hy[k] = hy[k - 1]; } hx[0] = tx; hy[0] = ty; if (hn < 4) hn++;
+    }
     if (swiping && (up & KEY_TOUCH)) {
         swiping = 0;
-        float dx = (sx1 - sx0) / K * SWIPE_GAIN, dy = (sy1 - sy0) / K * SWIPE_GAIN;
+        float ddx = sx1 - sx0, ddy = sy1 - sy0;
+        if (hn >= 3) {                                // speed over the last frames, scaled to a ~9-frame swipe
+            int k = hn - 1; float vx = (hx[0] - hx[k]) * 9.0f / k, vy = (hy[0] - hy[k]) * 9.0f / k;
+            if (vy < ddy) { ddy = vy; ddx = ddx * 0.5f + vx * 0.5f; }   // (dy is negative going up)
+        }
+        float dx = ddx / K * SWIPE_GAIN, dy = ddy / K * SWIPE_GAIN;
         if (dy < -8) throwMarker(dx, dy);
     }
 }
@@ -263,12 +302,9 @@ static void drawWorld(void) {
         const u16 *s; int w, h; markerSprite(m->col, &s, &w, &h);
         blitRot(s, w, h, wsx(m->x), wsy(m->y), m->rot);
     }
-    if (current < 3 && (charging || chargeT > 0)) {
-        int n = 14; float len = 40 + power * 110;
-        for (int i = 1; i <= n; i++) {
-            float t = (float)i / n;
-            grect(wsx(FIELD_CX + fcos(aimAng) * len * t) - 1, wsy(LAUNCH_Y + fsin(aimAng) * len * t) - 1, 3, 3, i * 3 <= (int)(power * n * 3) ? YELLOW : WHITE);
-        }
+    if (current < 3 && (charging || chargeT > 0)) {   // the power marker grows out of the launch spot
+        float len = charging ? (40 + power * 150) * K : 40 * K;
+        powerMarker(wsx(FIELD_CX), wsy(LAUNCH_Y), fcos(aimAng), fsin(aimAng), len, charging ? (power < 0.04f ? 0.04f : power) : 0);
     }
     for (int i = 0; i < 48; i++) if (conf[i].life > 0) grect(wsx(conf[i].x), wsy(conf[i].y), 3, 3, conf[i].c);
     for (int i = 0; i < 6; i++) if (pops[i].life > 0) gtext(wsx(pops[i].x), wsy(pops[i].y), pops[i].text, pops[i].col, 1);

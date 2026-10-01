@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════════
-//  QU33PH DS — main menu and every screen (the arcade comes later)
+//  QU33PH DS — main menu and every screen (the arcade's games are in arcade.c)
 //
 //  CONTROLS: touch or D-pad + A everywhere, B = back.
 //  In a match: swipe to throw, or D-pad aim + hold/release A; L/R marker
@@ -58,8 +58,9 @@ static void matchFinished(void) {
 }
 
 // ── title ─────────────────────────────────────────────────────────────────
-static const char *TITLE_ITEMS[11] = { "1 PLAYER", "2 PLAYER", "OLYMPICS", "HIGH SCORES", "SHOP", "ACHIEVEMENTS",
-                                        "CAREER RECORD", "SETTINGS", "THEMES", "SLOT", "PLINQU33PH" };
+#define TITLE_N 12
+static const char *TITLE_ITEMS[TITLE_N] = { "1 PLAYER", "2 PLAYER", "OLYMPICS", "HIGH SCORES", "SHOP", "ACHIEVEMENTS",
+                                        "CAREER RECORD", "SETTINGS", "THEMES", "SLOT", "PLINQU33PH", "ARCADE" };
 static void layoutGrid(int n, int cols, int y0, int h, int gap) {
     int w = (SW - 8 - (cols - 1) * 4) / cols;
     for (int i = 0; i < n; i++) { B[i].x = 4 + (i % cols) * (w + 4); B[i].y = y0 + (i / cols) * (h + gap); B[i].w = w; B[i].h = h; B[i].col = 0; B[i].dim = 0; }
@@ -73,13 +74,14 @@ static void drawTitle(void) {
     textC(bufTop, 150, "swipe or D-pad + A to throw", GREY, 1);
     textC(bufTop, 166, saveOK ? "progress saves to your SD card" : "no SD card: progress not saved", saveOK ? GREY : RED, 1);
     fillScreen(bufBot, DARK);
-    layoutGrid(11, 2, 4, 27, 4);
-    for (int i = 0; i < 11; i++) strcpy(B[i].label, TITLE_ITEMS[i]);
-    drawBtns(bufBot, B, 11, sel);
+    layoutGrid(TITLE_N, 2, 4, 27, 4);
+    for (int i = 0; i < TITLE_N; i++) strcpy(B[i].label, TITLE_ITEMS[i]);
+    B[11].col = GOLD;
+    drawBtns(bufBot, B, TITLE_N, sel);
 }
 static void inputTitle(void) {
-    layoutGrid(11, 2, 4, 27, 4);
-    int h = btnInput(B, 11, &sel, 2);
+    layoutGrid(TITLE_N, 2, 4, 27, 4);
+    int h = btnInput(B, TITLE_N, &sel, 2);
     switch (h) {
         case 0: startSingle(); break;
         case 1: startTwo(); break;
@@ -92,6 +94,7 @@ static void inputTitle(void) {
         case 8: goScreen(S_THEMES); break;
         case 9: goScreen(S_SLOT); break;
         case 10: goScreen(S_PLINKO); break;
+        case 11: goScreen(S_ARCADE); break;
     }
 }
 
@@ -424,7 +427,18 @@ int main(void) {
             case S_OLY_SELECT: inputOlySelect(kDown, tX, tY); break;
             case S_OLY_BRACKET: inputOlyBracket(kDown, tX, tY); break;
             case S_NAME: inputName(); break;
+            case S_ARCADE: inputArcade(); break;
+            case S_MINI_MENU: inputMiniMenu(); break;
+            case S_MINI: case S_MINI_PAUSE: inputMini(); if (screen == S_MINI) updateMini(); break;
+            case S_MINI_OVER: inputMiniOver(); break;
+            case S_BALL_MENU: inputBallMenu(); break;
+            case S_BALL: case S_BALL_PAUSE: inputBall(); if (screen == S_BALL) updateBall(); break;
+            case S_BALL_OVER: inputBallOver(); break;
         }
+        // Mini Qu33ph has its own music, from its menu to its results (as on the website)
+        // the arcade games have their own music, from their menu to their results (as on the website)
+        musicSet(screen >= S_MINI_MENU && screen <= S_MINI_OVER ? MUS_MINI : screen >= S_BALL_MENU && screen <= S_BALL_OVER ? MUS_BALL : MUS_MAIN);
+        musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
             case S_PLAY: matchDraw(); break;
@@ -442,11 +456,21 @@ int main(void) {
             case S_OLY_SELECT: drawOlySelect(); break;
             case S_OLY_BRACKET: drawOlyBracket(); break;
             case S_NAME: drawName(); break;
+            case S_ARCADE: drawArcade(); break;
+            case S_MINI_MENU: drawMiniMenu(); break;
+            case S_MINI: case S_MINI_PAUSE: drawMini(); break;
+            case S_MINI_OVER: drawMiniOver(); break;
+            case S_BALL_MENU: drawBallMenu(); break;
+            case S_BALL: case S_BALL_PAUSE: drawBall(); break;
+            case S_BALL_OVER: drawBallOver(); break;
         }
         drawToast();
+        // hand both finished frames to the screens: flush them out of the CPU's cache first
+        // (DMA reads memory directly), then copy 32 bits at a time during the blank
+        DC_FlushRange(bufTop, sizeof bufTop); DC_FlushRange(bufBot, sizeof bufBot);
         swiWaitForVBlank();
-        dmaCopy(bufTop, vramTop, sizeof bufTop);
-        dmaCopy(bufBot, vramBot, sizeof bufBot);
+        dmaCopyWords(3, bufTop, vramTop, sizeof bufTop);
+        dmaCopyWords(3, bufBot, vramBot, sizeof bufBot);
     }
     return 0;
 }
