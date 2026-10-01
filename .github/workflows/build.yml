@@ -21,20 +21,37 @@ jobs:
           if [ -z "$RULES" ] || [ ! -f "$RULES" ]; then
             echo "No ROM build rules found. Contents of the SDK:"
             ls -la "$BLOCKSDS" || true
-            ls -la "$BLOCKSDS/sys" || true
-            find "$BLOCKSDS" -maxdepth 3 -type d 2>/dev/null | head -n 60
             exit 1
           fi
           echo "Using build rules: $RULES"
+          rm -f source/assets_mini.c
+          mkdir -p nitrofs
+          find . -name '*.pak' -not -path './nitrofs/*' -exec cp {} nitrofs/ \;
+          echo "Game packs going into the cartridge:"; ls -la nitrofs
+          if [ ! -f nitrofs/mini.pak ] || [ ! -f nitrofs/ball.pak ]; then
+            echo "mini.pak and ball.pak are missing: upload them into the source folder"; exit 1
+          fi
           printf '%s\n' \
             'NAME          := qu33ph' \
             'GAME_TITLE    := Qu33ph DS' \
             'GAME_SUBTITLE := Flick markers' \
             'GAME_AUTHOR   := Qu33ph' \
             'SOURCEDIRS    := source' \
+            'NITROFSDIR    := nitrofs' \
             "include $RULES" > Makefile
           cat Makefile
-          make
+          make NITROFSDIR=nitrofs
+          ls -la *.nds
+          if ! grep -q QPAK qu33ph.nds; then
+            echo "packs not in the .nds yet: adding them with ndstool"
+            NDSTOOL=$(command -v ndstool || find "$BLOCKSDS" /opt -name ndstool -type f 2>/dev/null | head -n1)
+            echo "ndstool: $NDSTOOL"
+            mkdir -p romparts && cd romparts
+            "$NDSTOOL" -x ../qu33ph.nds -9 arm9.bin -7 arm7.bin -t banner.bin -h header.bin
+            "$NDSTOOL" -c ../qu33ph.nds -9 arm9.bin -7 arm7.bin -t banner.bin -h header.bin -d ../nitrofs
+            cd ..
+          fi
+          if grep -q QPAK qu33ph.nds; then echo "OK: game packs are inside qu33ph.nds"; else echo "FAILED: packs missing from qu33ph.nds"; exit 1; fi
           ls -la *.nds
 
       - uses: actions/upload-artifact@v4
