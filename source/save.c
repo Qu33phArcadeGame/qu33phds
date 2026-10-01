@@ -133,9 +133,14 @@ const u16 *fieldPix = fieldTint;
 static int clamp31(int v) { return v < 0 ? 0 : v > 31 ? 31 : v; }
 void applyTheme(void) {
     int t = sv.theme; u16 pal[256];
-    for (int i = 0; i < 256; i++) pal[i] = t <= 1 ? (field_pal[i] | 0x8000) : themeTint(field_pal[i], t);   // REALISTIC & CARTOON: photo as-is
+    for (int i = 0; i < 256; i++) pal[i] = t <= 0 ? (field_pal[i] | 0x8000) : themeTint(field_pal[i], t);   // REALISTIC: the photo as-is
     for (int i = 0; i < FIELD_W * FIELD_H; i++) fieldTint[i] = pal[field[i]];
+    if (t == 1)                                       // CARTOON: halftone dots printed over the grey photo
+        for (int y = 0; y < FIELD_H; y += 4) for (int x = (y / 4 % 2) * 2; x < FIELD_W; x += 4) {
+            u16 *p = &fieldTint[y * FIELD_W + x]; *p = ((*p >> 1) & 0x3DEF) | 0x8000;
+        }
     arcadeThemeChanged();
+    themeUI(t);
 }
 u16 themeTint(u16 p, int t) {
     int r = p & 31, g = (p >> 5) & 31, b = (p >> 10) & 31, l = (r * 3 + g * 5 + b * 2) / 10;

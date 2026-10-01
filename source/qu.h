@@ -11,11 +11,13 @@
 #define COL(r, g, b) (RGB15(r, g, b) | BIT(15))
 #define WHITE  COL(31, 31, 31)
 #define BLACK  COL(0, 0, 0)
-#define YELLOW COL(31, 27, 4)
-#define GOLD   COL(31, 24, 2)
+// the accent colours follow the theme (set by themeUI)
+extern u16 uiGold, uiYellow, uiGrey;
+#define YELLOW uiYellow
+#define GOLD   uiGold
 #define RED    COL(31, 6, 6)
 #define LIME   COL(8, 31, 8)
-#define GREY   COL(18, 18, 18)
+#define GREY   uiGrey
 #define DARK   COL(2, 2, 3)
 
 // ── screens ───────────────────────────────────────────────────────────────
@@ -90,7 +92,9 @@ void blitRot(const u16 *spr, int w, int h, int cx, int cy, float ang);
 void blit(u16 *buf, const u16 *spr, int w, int h, int x, int y);
 void blitRotScale(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale);
 void gdark(int x, int gy);
-void drawIndexed(const u8 *idx, const u16 *pal);   // both screens from a 256-colour picture
+void drawIndexed(const u8 *idx, const u16 *pal);
+void themeUI(int t);             // every screen's look for theme t: backgrounds, buttons, accents, logo
+extern u16 logoT[LOGO_W * LOGO_H];   // both screens from a 256-colour picture
 void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad);
 void powerMarker(int x0, int gy0, float ux, float uy, float len, float power);
 void rect(u16 *buf, int x, int y, int w, int h, u16 c);

@@ -67,7 +67,7 @@ static void layoutGrid(int n, int cols, int y0, int h, int gap) {
 }
 static void drawTitle(void) {
     fillScreen(bufTop, DARK);
-    blit(bufTop, logo, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 2);
+    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 2);
     coinCount(bufTop, 8, 8);
     char s[32], a[10];
     if (sv.high1p[0].name[0]) { scoreStr(a, sv.high1p[0].score2); sprintf(s, "HIGH SCORE  %s", a); textC(bufTop, 128, s, WHITE, 1); }
@@ -350,7 +350,7 @@ static void inputName(void) {
 static void drawResults(void) {
     char s[40], a[10], b[10];
     fillScreen(bufTop, DARK);
-    blit(bufTop, logo, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0);
+    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0);
     if (mode == M_SINGLE) {
         scoreStr(a, score2[0]); sprintf(s, "FINAL SCORE  %s", a); textC(bufTop, 124, s, YELLOW, 2);
         if (resultsNewBest) textC(bufTop, 158, "NEW PERSONAL BEST!", LIME, 1);
@@ -374,7 +374,7 @@ static void inputResults(void) {
 static void drawHandoff(void) {
     char s[32];
     fillScreen(bufTop, DARK);
-    blit(bufTop, logo, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 4);
+    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 4);
     sprintf(s, "PLAYER %d", player + 1); textC(bufTop, 132, s, YELLOW, 2);
     sprintf(s, "ROUND %d / %d", p2Round, sv.twoRounds); textC(bufTop, 168, s, WHITE, 1);
     fillScreen(bufBot, DARK);

@@ -191,7 +191,7 @@ void drawSlot(void) {
                             "logo middle 3   pair 2", "coin middle 2   chair middle 1" };
     for (int i = 0; i < 8; i++) textC(bufTop, 26 + i * 17, rows[i], i == 0 ? YELLOW : WHITE, 1);
     coinCount(bufTop, 6, 170);
-    fillScreen(bufBot, COL(4, 2, 2));
+    fillScreen(bufBot, DARK);
     box(bufBot, 34, 14, 188, 72, BLACK, GOLD);
     for (int i = 0; i < 3; i++) blit(bufBot, SYM[reel[i]], 52, 52, 44 + i * 58, 24);
     char s[32];
@@ -275,8 +275,8 @@ void drawPlinko(void) {
     char s[32]; sprintf(s, "won this set: %d", plWin); textC(bufTop, 100, s, LIME, 1);
     textC(bufTop, 150, "B  back", GREY, 1);
     coinCount(bufTop, 6, 170);
-    fillScreen(bufBot, COL(2, 3, 6));
-    for (int r = 0; r < PEG_ROWS; r++) for (int c = 0; c < pegCount(r); c++) rect(bufBot, pegX(r, c) - 2, pegY(r) - 2, 5, 5, WHITE);
+    fillScreen(bufBot, DARK);
+    for (int r = 0; r < PEG_ROWS; r++) for (int c = 0; c < pegCount(r); c++) { rect(bufBot, pegX(r, c) - 3, pegY(r) - 3, 7, 7, BLACK); rect(bufBot, pegX(r, c) - 2, pegY(r) - 2, 5, 5, WHITE); }
     for (int i = 0; i < 7; i++) {
         int x0 = i * 256 / 7, x1 = (i + 1) * 256 / 7;
         rect(bufBot, x0, 170, 1, 22, GREY);

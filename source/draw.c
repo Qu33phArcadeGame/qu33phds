@@ -107,7 +107,10 @@ void rect(u16 *buf, int x, int y, int w, int h, u16 c) {
     int x0 = x < 0 ? 0 : x, x1 = x + w > SW ? SW : x + w, y0 = y < 0 ? 0 : y, y1 = y + h > SH ? SH : y + h;
     for (int yy = y0; yy < y1; yy++) hfill(&buf[yy * SW], x0, x1, c);
 }
+static u16 bgImg[2][SW * SH] __attribute__((aligned(32)));   // this theme's menu backgrounds (top, bottom)
+static int bgOK;
 void fillScreen(u16 *buf, u16 c) {
+    if (c == DARK && bgOK) { memcpy(buf, buf == bufTop ? bgImg[0] : bgImg[1], SW * SH * 2); return; }
     u32 cc = c | ((u32)c << 16), *d = (u32 *)buf;
     for (int i = 0; i < SW * SH / 16; i++) { d[0] = cc; d[1] = cc; d[2] = cc; d[3] = cc; d[4] = cc; d[5] = cc; d[6] = cc; d[7] = cc; d += 8; }
 }
@@ -132,7 +135,8 @@ static void shape(u16 *buf, int x, int y, int w, int h, int rl, int rr, const u1
         hfill(&buf[yy * SW], x0, x1, grad ? grad[j * 32 / h] : c); }
 }
 // ── text (DejaVu Sans Bold glyphs from assets.c), dark outline for reading on photos
-int textW(const char *t, int sc) { int w = 0; for (; *t; t++) { int ch = *t; if (ch < 32 || ch > 126) ch = '?'; w += font_w[ch - 32] * sc; } return w; }
+static int squeeze;                          // pixels taken off each letter's spacing (long button labels)
+int textW(const char *t, int sc) { int w = 0; for (; *t; t++) { int ch = *t; if (ch < 32 || ch > 126) ch = '?'; w += (font_w[ch - 32] - squeeze) * sc; } return w; }
 // One pass per glyph row: the outline is the row's pixels spread one step left/right plus the
 // rows above and below, minus the letter itself, and only set bits are visited. (It used to be
 // five full passes over every bit of every row — the single biggest cost on menu screens.)
@@ -155,7 +159,7 @@ static void glyphs(u16 *buf, int gyMode, int x, int y, const char *t, u16 col, i
                 }
             }
         }
-        x += font_w[ch - 32] * sc;
+        x += (font_w[ch - 32] - squeeze) * sc;
     }
 }
 void text(u16 *buf, int x, int y, const char *t, u16 col, int sc) { glyphs(buf, 0, x, y, t, col, sc); }
@@ -171,38 +175,129 @@ void coinCount(u16 *buf, int x, int y) {
     text(buf, x + COIN_W + 4, y + 2, s, GOLD, 1);
 }
 
+
+// ── themes on every screen ──────────────────────────────────────────────────
+// The website recolours the whole page per theme; here each theme gets its own menu
+// background (drawn once when the theme changes, then copied), button colours, accent
+// colours for titles and highlights, and a recoloured logo. The tables and fields are
+// recoloured by the same themeTint the website-style filters are modelled on.
+u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18);
+u16 logoT[LOGO_W * LOGO_H];
+static u16 uiEdge = COL(31, 31, 31), uiSel = COL(31, 26, 4), uiGradTop = COL(7, 7, 7), uiGradMid = COL(2, 2, 2), uiGradEnd = COL(0, 0, 0);
+static u16 BTN_GRAD[32];
+static u32 rs = 1;
+static int rnd(int n) { rs = rs * 1103515245u + 12345u; return (int)((rs >> 16) % (unsigned)n); }
+static u16 mix(u16 a, u16 b, int k, int n) {          // a -> b, k of n
+    int ar = a & 31, ag = (a >> 5) & 31, ab = (a >> 10) & 31, br = b & 31, bg = (b >> 5) & 31, bb = (b >> 10) & 31;
+    return COL(ar + (br - ar) * k / n, ag + (bg - ag) * k / n, ab + (bb - ab) * k / n);
+}
+static void bgPx(int x, int gy, u16 c) { if ((unsigned)x < SW && (unsigned)gy < 2 * SH) bgImg[gy / SH][(gy % SH) * SW + x] = c; }
+static void bgGrad(u16 top, u16 mid, u16 bot) {        // one gradient down both screens
+    for (int gy = 0; gy < 2 * SH; gy++) {
+        u16 c = gy < SH ? mix(top, mid, gy, SH) : mix(mid, bot, gy - SH, SH);
+        for (int x = 0; x < SW; x++) bgImg[gy / SH][(gy % SH) * SW + x] = c;
+    }
+}
+void themeUI(int t) {
+    rs = 12345 + t;
+    switch (t) {
+    default:                                            // REALISTIC: as it always was
+        uiGold = COL(31, 24, 2); uiYellow = COL(31, 27, 4); uiGrey = COL(18, 18, 18);
+        uiEdge = WHITE; uiSel = COL(31, 26, 4); uiGradTop = COL(7, 7, 7); uiGradMid = COL(2, 2, 2); uiGradEnd = BLACK;
+        bgGrad(DARK, DARK, DARK);
+        break;
+    case 1:                                             // CARTOON: newsprint with halftone dots, ink outlines
+        uiGold = COL(31, 22, 0); uiYellow = COL(31, 29, 6); uiGrey = COL(23, 23, 22);
+        uiEdge = BLACK; uiSel = COL(31, 6, 6); uiGradTop = COL(14, 14, 14); uiGradMid = COL(6, 6, 6); uiGradEnd = COL(2, 2, 2);
+        bgGrad(COL(28, 27, 24), COL(26, 25, 22), COL(24, 23, 20));
+        for (int gy = 0; gy < 2 * SH; gy += 6) for (int x = (gy / 6 % 2) * 3; x < SW; x += 6) {
+            int r = 1 + (gy * 2 / (2 * SH));            // dots grow down the screens, like a comic panel's shading
+            for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) if (i * i + j * j <= r * r) bgPx(x + i, gy + j, COL(19, 18, 16));
+        }
+        for (int gy = 0; gy < 2 * SH; gy++) { bgPx(0, gy, BLACK); bgPx(1, gy, BLACK); bgPx(SW - 1, gy, BLACK); bgPx(SW - 2, gy, BLACK); }
+        for (int x = 0; x < SW; x++) { bgPx(x, 0, BLACK); bgPx(x, 1, BLACK); bgPx(x, 2 * SH - 1, BLACK); bgPx(x, 2 * SH - 2, BLACK); }
+        break;
+    case 2:                                             // NIGHT: deep blue sky, stars, a moon
+        uiGold = COL(29, 27, 14); uiYellow = COL(31, 30, 20); uiGrey = COL(15, 17, 23);
+        uiEdge = COL(20, 24, 31); uiSel = COL(31, 29, 14); uiGradTop = COL(5, 7, 15); uiGradMid = COL(1, 2, 6); uiGradEnd = COL(0, 0, 2);
+        bgGrad(COL(0, 1, 4), COL(2, 3, 9), COL(1, 1, 5));
+        for (int i = 0; i < 220; i++) { int x = rnd(SW), y = rnd(2 * SH), b = 14 + rnd(18); u16 c = COL(b, b, b > 28 ? 31 : b + 3);
+            bgPx(x, y, c); if (b > 27) { bgPx(x + 1, y, c); bgPx(x - 1, y, c); bgPx(x, y + 1, c); bgPx(x, y - 1, c); } }
+        for (int j = -14; j <= 14; j++) for (int i = -14; i <= 14; i++) { int d = i * i + j * j, e = (i + 6) * (i + 6) + (j - 4) * (j - 4);
+            if (d <= 196 && e > 160) bgPx(222 + i, 30 + j, COL(29, 29, 24)); }
+        break;
+    case 3:                                             // SUNSET: purple sky down to orange, a sinking sun
+        uiGold = COL(31, 20, 4); uiYellow = COL(31, 27, 10); uiGrey = COL(27, 19, 17);
+        uiEdge = COL(31, 23, 14); uiSel = COL(31, 30, 12); uiGradTop = COL(15, 5, 8); uiGradMid = COL(6, 1, 4); uiGradEnd = COL(2, 0, 2);
+        bgGrad(COL(7, 2, 10), COL(20, 6, 9), COL(26, 11, 4));
+        for (int j = -40; j <= 40; j++) for (int i = -40; i <= 40; i++) if (i * i + j * j <= 1600) {
+            int gy = 2 * SH - 10 + j; if (gy >= 2 * SH - 10 && (gy / 4) % 2) continue;      // banded at the horizon
+            bgPx(128 + i, gy, mix(COL(31, 28, 10), COL(31, 12, 4), j + 40, 80)); }
+        for (int gy = 0; gy < 2 * SH; gy += 7) for (int x = rnd(40); x < SW; x += 60 + rnd(60)) for (int i = 0; i < 18; i++) bgPx(x + i, gy, mix(COL(31, 16, 10), COL(20, 6, 9), gy, 2 * SH));
+        break;
+    case 4:                                             // NEON: black, a glowing grid, pink and cyan
+        uiGold = COL(31, 10, 28); uiYellow = COL(10, 31, 31); uiGrey = COL(20, 15, 26);
+        uiEdge = COL(31, 8, 27); uiSel = COL(8, 31, 31); uiGradTop = COL(9, 1, 13); uiGradMid = COL(3, 0, 5); uiGradEnd = COL(0, 0, 1);
+        bgGrad(COL(1, 0, 3), COL(3, 0, 6), COL(1, 0, 3));
+        for (int gy = 0; gy < 2 * SH; gy++) for (int x = 0; x < SW; x++) {
+            int gx = x % 24 == 0 || gy % 24 == 0, edge = x < 3 || x >= SW - 3;
+            if (gx) bgPx(x, gy, gy < SH ? COL(9, 1, 13) : COL(1, 8, 12));
+            if (edge) bgPx(x, gy, gy < SH ? COL(31, 8, 27) : COL(8, 31, 31));
+        }
+        break;
+    case 5:                                             // GOLDEN: warm dark gold with sparkle
+        uiGold = COL(31, 26, 6); uiYellow = COL(31, 30, 16); uiGrey = COL(23, 19, 11);
+        uiEdge = COL(31, 25, 8); uiSel = COL(31, 31, 22); uiGradTop = COL(12, 8, 1); uiGradMid = COL(4, 2, 0); uiGradEnd = COL(1, 1, 0);
+        bgGrad(COL(8, 5, 0), COL(4, 2, 0), COL(9, 6, 1));
+        for (int i = 0; i < 140; i++) { int x = rnd(SW), y = rnd(2 * SH), b = rnd(3);
+            bgPx(x, y, COL(31, 28, 12)); if (!b) for (int k = 1; k < 4; k++) { u16 c = COL(28 - k * 4, 22 - k * 4, 6); bgPx(x + k, y, c); bgPx(x - k, y, c); bgPx(x, y + k, c); bgPx(x, y - k, c); } }
+        break;
+    }
+    for (int i = 0; i < 32; i++) BTN_GRAD[i] = i < 15 ? mix(uiGradTop, uiGradMid, i, 15) : mix(uiGradMid, uiGradEnd, i - 15, 17);
+    // the logo takes the theme's colour but stays bright enough to read
+    for (int i = 0; i < LOGO_W * LOGO_H; i++) logoT[i] = (logo[i] & 0x8000) ? (t <= 1 ? themeTint(logo[i], t) : mix(logo[i], themeTint(logo[i], t), 1, 2)) : 0;
+    bgOK = 1;
+}
+
 // ── buttons ───────────────────────────────────────────────────────────────
 // The website's marker buttons: a dark gradient body with a white outline and a rounded cap
 // on the left end, like a marker pen. The highlighted one gets a gold outline and sinks 2 px
 // while it's held, as the website's buttons press down.
-static u16 BTN_GRAD[32];
-static void btnGrad(void) {
-    if (BTN_GRAD[0]) return;
-    for (int i = 0; i < 32; i++) {                         // #3c3c3c -> #161616 (46%) -> #000
-        int v = i < 15 ? 7 - i * 5 / 15 : 2 - (i - 15) * 2 / 17;
-        BTN_GRAD[i] = COL(v, v, v);
-    }
+static void btnGrad(void) { if (!(BTN_GRAD[0] & 0x8000)) themeUI(0); }
+void markerShapeCap(u16 *buf, int x, int y, int w, int h, int cap, u16 edge, const u16 *grad) {
+    int rc = h / 2 - 1, rb = h / 4; if (rc > cap) rc = cap;
+    u16 shine = mix(grad[0], WHITE, 1, 3);
+    shape(buf, x, y, w, h, rc, rb, 0, edge);                                      // outline
+    shape(buf, x + 2, y + 2, cap - 3, h - 4, rc - 2 > 1 ? rc - 2 : 1, 1, grad, 0); // the cap
+    shape(buf, x + cap + 1, y + 2, w - cap - 3, h - 4, 1, rb - 2 > 1 ? rb - 2 : 1, grad, 0);   // the body
+    if (cap > 8) rect(buf, x + 3 + rc / 2, y + 2, cap - 5 - rc / 2, 1, shine);  // the shine along the top
+    rect(buf, x + cap + 2, y + 2, w - cap - 3 - rb, 1, shine);
 }
 void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad) {
     int cap = h * 45 / 100; if (cap < 10) cap = 10;
-    int rc = h / 2 - 1, rb = h / 4;
-    shape(buf, x, y, w, h, rc, rb, 0, edge);                                      // outline
-    shape(buf, x + 2, y + 2, cap - 3, h - 4, rc - 2, 1, grad, 0);                 // the cap
-    shape(buf, x + cap + 1, y + 2, w - cap - 3, h - 4, 1, rb - 2 > 1 ? rb - 2 : 1, grad, 0);   // the body
-    rect(buf, x + 3, y + 2, cap - 5, 1, COL(13, 13, 13));                         // the shine along the top
-    rect(buf, x + cap + 2, y + 2, w - cap - 6, 1, COL(13, 13, 13));
+    markerShapeCap(buf, x, y, w, h, cap, edge, grad);
 }
 void drawBtns(u16 *buf, Btn *b, int n, int sel) {
     btnGrad();
     for (int i = 0; i < n; i++) {
         int on = (i == sel), dn = on && (kHeld & KEY_A) ? 2 : 0;
-        u16 edge = b[i].dim ? GREY : (on ? COL(31, 26, 4) : WHITE);
-        int cap = b[i].h * 45 / 100; if (cap < 10) cap = 10;
-        markerShape(buf, b[i].x, b[i].y + dn, b[i].w, b[i].h, edge, BTN_GRAD);
+        u16 edge = b[i].dim ? mix(uiEdge, BLACK, 1, 2) : (on ? uiSel : uiEdge);
         u16 c = b[i].col ? b[i].col : (b[i].dim ? GREY : (on ? YELLOW : WHITE));
-        int bx = b[i].x + cap, bw = b[i].w - cap, tw = textW(b[i].label, 1);
-        if (tw > bw - 4) { bx = b[i].x + 2; bw = b[i].w - 4; }                  // long labels may run over the cap
+        if (b[i].w < 40) {                                // little keys (the name keyboard): plain rounded keys
+            shape(buf, b[i].x, b[i].y + dn, b[i].w, b[i].h, 3, 3, 0, edge);
+            shape(buf, b[i].x + 1, b[i].y + dn + 1, b[i].w - 2, b[i].h - 2, 2, 2, BTN_GRAD, 0);
+            text(buf, b[i].x + (b[i].w - textW(b[i].label, 1)) / 2, b[i].y + dn + (b[i].h - FONT_H) / 2 + 1, b[i].label, c, 1);
+            continue;
+        }
+        int cap = b[i].h * 45 / 100; if (cap < 10) cap = 10;
+        // the label must sit inside the body: tighten the letters, then shrink the cap, until it does
+        squeeze = 0; int tw = textW(b[i].label, 1);
+        while (tw > b[i].w - cap - 8 && squeeze < 2) { squeeze++; tw = textW(b[i].label, 1); }
+        while (tw > b[i].w - cap - 8 && cap > 7) cap--;
+        markerShapeCap(buf, b[i].x, b[i].y + dn, b[i].w, b[i].h, cap, edge, BTN_GRAD);
+        int bx = b[i].x + cap + 1, bw = b[i].w - cap - 3;
         text(buf, bx + (bw - tw) / 2, b[i].y + dn + (b[i].h - FONT_H) / 2 + 1, b[i].label, c, 1);
+        squeeze = 0;
     }
 }
 // The power marker: a marker pointing where the throw goes, growing with power and filling

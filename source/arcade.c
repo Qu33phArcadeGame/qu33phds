@@ -31,7 +31,7 @@ static void arcLayout(void) {
 void drawArcade(void) {
     arcLayout();
     fillScreen(bufTop, DARK);
-    blit(bufTop, logo, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0);
+    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0);
     coinCount(bufTop, 8, 8);
     textC(bufTop, 118, "ARCADE", GOLD, 2);
     if (arcSel < ARC_COUNT) {
@@ -45,8 +45,8 @@ void drawArcade(void) {
     if (arcErrT > 0) {                  // a game's pack couldn't be loaded
         arcErrT--;
         box(bufTop, 8, 138, 240, 50, COL(6, 0, 0), RED);
-        textC(bufTop, 144, pakErr == 1 ? "CAN'T READ THE GAME'S FILES" : pakErr == 2 ? "GAME FILE MISSING" : "GAME FILE IS OUT OF DATE", WHITE, 1);
-        textC(bufTop, 162, pakErr == 1 ? "start Qu33ph from TWiLight Menu++" : "rebuild with the new .pak files", YELLOW, 1);
+        textC(bufTop, 144, pakErr == 3 ? "GAME FILE IS OUT OF DATE" : "GAME FILES NOT FOUND", WHITE, 1);
+        textC(bufTop, 162, pakErr == 3 ? "rebuild with the new .pak" : "rebuild, or .paks to SD/qu33ph", YELLOW, 1);
     }
     fillScreen(bufBot, DARK);
     drawBtns(bufBot, AB, ARC_COUNT + 1, arcSel);

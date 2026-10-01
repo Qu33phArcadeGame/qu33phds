@@ -17,7 +17,7 @@
 #define REDDOT_Y     159.8f
 #define TOUCH_DIST   45.0f
 #define VIEW_H       (384.0f / K)
-#define SWIPE_GAIN   2.5f
+#define SWIPE_GAIN   2.2f
 
 typedef struct { float x, y, vx, vy, curve, rot, spin, life; int stopped, fallen, armed, deducted, megaTriggered, col; float tx[10], ty[10]; int tn; } Marker;
 static Marker mk[3];
@@ -243,7 +243,7 @@ void matchUpdate(void) {
 // Every throw is measured the same way, so the first marker of a set flies exactly like the
 // others: the swipe's strength is the bigger of its total length and its speed over the last
 // few frames (a quick flick counts fully), and a glitchy first touch sample is ignored.
-// A full button charge (or a two-thirds-height swipe) reaches the back wall.
+// A full button charge just reaches the back wall; a swipe needs real length or speed to get there.
 static float aimAng = -1.5708f, power; static int charging, chargeT, ph;
 static int swiping, sx0, sy0, sx1, sy1, hx[4], hy[4], hn;
 void matchInput(int down, int held, int up, int tx, int ty) {
@@ -258,7 +258,7 @@ void matchInput(int down, int held, int up, int tx, int ty) {
         ph++; float p = (ph % 64) / 32.0f; power = p < 1 ? p : 2 - p;    // full in about half a second
         chargeT = 90;
         if (down & KEY_B) charging = 0;
-        else if (up & KEY_A) { charging = 0; float pw = 80 + power * 190; throwMarker(fcos(aimAng) * pw, fsin(aimAng) * pw); }
+        else if (up & KEY_A) { charging = 0; float pw = 70 + power * 180; throwMarker(fcos(aimAng) * pw, fsin(aimAng) * pw); }
     }
     if (chargeT > 0 && !charging) chargeT--;
     if (down & KEY_TOUCH) { swiping = 1; sx0 = sx1 = tx; sy0 = sy1 = ty; hn = 0; }
@@ -270,8 +270,8 @@ void matchInput(int down, int held, int up, int tx, int ty) {
     if (swiping && (up & KEY_TOUCH)) {
         swiping = 0;
         float ddx = sx1 - sx0, ddy = sy1 - sy0;
-        if (hn >= 3) {                                // speed over the last frames, scaled to a ~9-frame swipe
-            int k = hn - 1; float vx = (hx[0] - hx[k]) * 9.0f / k, vy = (hy[0] - hy[k]) * 9.0f / k;
+        if (hn >= 3) {                                // speed over the last frames, scaled to a ~6-frame swipe
+            int k = hn - 1; float vx = (hx[0] - hx[k]) * 6.0f / k, vy = (hy[0] - hy[k]) * 6.0f / k;
             if (vy < ddy) { ddy = vy; ddx = ddx * 0.5f + vx * 0.5f; }   // (dy is negative going up)
         }
         float dx = ddx / K * SWIPE_GAIN, dy = ddy / K * SWIPE_GAIN;
