@@ -46,7 +46,7 @@ void drawArcade(void) {
         arcErrT--;
         box(bufTop, 8, 138, 240, 50, COL(6, 0, 0), RED);
         textC(bufTop, 144, pakErr == 1 ? "CAN'T READ THE GAME'S FILES" : pakErr == 2 ? "GAME FILE MISSING" : "GAME FILE IS OUT OF DATE", WHITE, 1);
-        textC(bufTop, 162, pakErr == 1 ? "start Qu33ph from TWiLight Menu++" : "rebuild with the new .pak files", YELLOW, 1);
+        textC(bufTop, 162, pakErr == 1 ? "ARCADE DATA IS NOT BUILT IN" : "REBUILD THE DS GAME", YELLOW, 1);
     }
     fillScreen(bufBot, DARK);
     drawBtns(bufBot, AB, ARC_COUNT + 1, arcSel);
