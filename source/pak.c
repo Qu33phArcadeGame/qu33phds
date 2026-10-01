@@ -2,6 +2,7 @@
 // The build puts every .pak into the cartridge image's file system (NitroFS); the game reads
 // the one it needs into memory when you open that game and frees the previous one.
 #include "qu.h"
+#include <fat.h>
 #ifndef PAK_TEST_DIR
 #include <filesystem.h>
 #endif
@@ -9,7 +10,8 @@
 const u8 *arcPak;
 int pakErr;
 static char cur[16];
-static int fsState;                 // 0 not tried yet, 1 ready, -1 unavailable
+static int fsState;                 // NitroFS: 0 not tried, 1 ready, -1 unavailable
+static int fatState;                // external SD fallback: 0 not tried, 1 ready, -1 unavailable
 
 int pakIs(const char *name) { return arcPak && !strcmp(cur, name); }
 
@@ -21,15 +23,33 @@ int pakUse(const char *name, u32 size, u32 id) {
     free((void *)arcPak); arcPak = 0; cur[0] = 0;
 
     char path[64];
+    FILE *f = NULL;
 #ifdef PAK_TEST_DIR
     fsState = 1; sprintf(path, "%s/%s", PAK_TEST_DIR, name);
+    f = fopen(path, "rb");
 #else
+    // Normal builds keep the packs inside NitroFS. This works from melonDS and
+    // from loaders that provide argv[0]. Some older R4 loaders don't provide
+    // argv[0], however, so keep an SD-card fallback as well.
     if (fsState == 0) fsState = nitroFSInit(NULL) ? 1 : -1;
-    sprintf(path, "nitro:/%s", name);
+    if (fsState > 0) {
+        sprintf(path, "nitro:/%s", name);
+        f = fopen(path, "rb");
+    }
+
+    // If NitroFS can't be initialized (usually an old loader without argv),
+    // allow mini.pak/ball.pak to be placed beside the .nds on the flashcart.
+    // fatInitDefault() is called during startup by saveInit(), so fat:/ is the
+    // correct BlocksDS DLDI filesystem for an R4/flashcart.
+    if (!f) {
+        if (fatState == 0) fatState = fatInitDefault() ? 1 : -1;
+        if (fatState > 0) {
+            sprintf(path, "fat:/%s", name);
+            f = fopen(path, "rb");
+        }
+    }
 #endif
-    if (fsState < 0) { pakErr = 1; return 0; }
-    FILE *f = fopen(path, "rb");
-    if (!f) { pakErr = 2; return 0; }
+    if (!f) { pakErr = (fsState < 0 && fatState < 0) ? 1 : 2; return 0; }
     u8 *buf = malloc(size);
     u32 n = buf ? fread(buf, 1, size, f) : 0;
     int extra = fgetc(f) != EOF;      // a bigger file than expected is an old/mismatched pack too
