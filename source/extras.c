@@ -163,7 +163,7 @@ static int checkWin(const int *r, const char **label) {
 }
 static void spin(int bet) {
     if (spinT > 0 || sv.coins < bet) { if (sv.coins < bet) lastLabel = "not enough coins"; return; }
-    sv.coins -= bet; spinBet = bet; spinT = 13; lastWin = 0; lastLabel = "";
+    spendCoins(bet); spinBet = bet; spinT = 13; lastWin = 0; lastLabel = "";
     for (int i = 0; i < 3; i++) result[i] = pickSym();
     sv.slotSpins++; unlockAch(A_SLOT_SPIN);
 }
@@ -177,7 +177,7 @@ void updateSlot(void) {
             lastWin = w * spinBet; addCoins(lastWin); sv.slotWins++; unlockAch(A_SLOT_WIN);
             if (result[0] == Y_LOGO && result[1] == Y_LOGO && result[2] == Y_LOGO) unlockAch(A_SLOT_JACKPOT);
             sfxPlop();
-        }
+        } else sv.slotLost += spinBet;
         saveWrite();
     }
 }
@@ -227,7 +227,7 @@ static void drop(void) {
         for (int i = 0; i < 3; i++) if (balls[i].live) return;
         plinkoEnter(); return;
     }
-    if (!paid) { if (sv.coins < 5) return; sv.coins -= 5; paid = 1; }
+    if (!paid) { if (sv.coins < 5) return; spendCoins(5); paid = 1; }
     Ball *b = &balls[dropIdx++];
     b->x = aimX; b->y = 10; b->vx = (frand() - 0.5f) * 0.6f; b->vy = 0; b->live = 1; b->done = 0;
     b->rot = 1.5708f; b->spin = (frand() - 0.5f) * 0.1f;

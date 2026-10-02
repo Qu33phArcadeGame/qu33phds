@@ -12,7 +12,8 @@
 #define WHITE  COL(31, 31, 31)
 #define BLACK  COL(0, 0, 0)
 // the accent colours follow the theme (set by themeUI)
-extern u16 uiGold, uiYellow, uiGrey;
+extern u16 uiGold, uiYellow, uiGrey, uiIcon;
+void blitInk(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 ink);
 #define YELLOW uiYellow
 #define GOLD   uiGold
 #define RED    COL(31, 6, 6)
@@ -25,7 +26,8 @@ enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, 
        S_SETTINGS, S_THEMES, S_SLOT, S_PLINKO, S_OLY_SELECT, S_OLY_BRACKET, S_NAME,
        S_ARCADE, S_MINI_MENU, S_MINI, S_MINI_PAUSE, S_MINI_OVER,
        S_BALL_MENU, S_BALL, S_BALL_PAUSE, S_BALL_OVER,
-       S_FIDGET_MENU, S_FIDGET, S_FIDGET_PAUSE, S_FIDGET_OVER };
+       S_FIDGET_MENU, S_FIDGET, S_FIDGET_PAUSE, S_FIDGET_OVER, S_COINREC,
+       S_BOWL_MENU, S_BOWL, S_BOWL_PAUSE, S_BOWL_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -46,7 +48,8 @@ typedef struct {
     // ── added in save version 2 (the arcade). Older saves load untouched; these start at 0.
     int arcadeBest[16], arcadePlays[16];     // one slot per arcade game (see ARC_* in arcade.c)
     int ballBest[3];                         // Qu33ph-Ball: best on each machine (was spare room, so old saves read 0)
-    u32 spare[13];                           // room to grow without another version bump
+    int coinsSpent, slotLost;                // the coin record (were spare room, so old saves read 0)
+    u32 spare[11];                           // room to grow without another version bump
 } SaveData;
 extern SaveData sv;
 extern int saveOK;               // 1 if the microSD card can be written
@@ -68,7 +71,8 @@ enum { A_FIRST_GAME, A_FIRST_QU33PH, A_FIRST_MEGA, A_FIVE_MEGA, A_TEN_MEGA, A_FI
        A_FIFTY_GAMES, A_HUNDRED_GAMES, A_TEN_QU33PH, A_SD_QU33PH, A_MEGA_25, A_FIFTY_PEEF, A_SCORE_10, A_SCORE_25,
        A_FIRST_MEDAL, A_GOLD_MEDAL, A_SLOT_SPIN, A_SLOT_WIN, A_SLOT_JACKPOT, A_COINS_100, A_COINS_500, A_UNLOCK_THEME };
 void unlockAch(int a);
-void addCoins(int n);            // applies the coin doubler to earnings
+void addCoins(int n);
+void spendCoins(int n);          // every purchase / bet, so the coin record can count it            // applies the coin doubler to earnings
 void trackGameEnd(int score2);
 void trackQu33ph(int suddenDeath);
 void trackMega(void);
@@ -120,7 +124,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void);
-enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET };
+enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks
 void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
@@ -180,6 +184,11 @@ int  fidgetEnter(void); void fidgetThemeChanged(void);
 void drawFidgetMenu(void); void inputFidgetMenu(void);
 void drawFidget(void); void inputFidget(void); void updateFidget(void);
 void drawFidgetOver(void); void inputFidgetOver(void);
+// Bowling (bowl.c)
+int  bowlEnter(void); void bowlThemeChanged(void);
+void drawBowlMenu(void); void inputBowlMenu(void);
+void drawBowl(void); void inputBowl(void); void updateBowl(void);
+void drawBowlOver(void); void inputBowlOver(void);
 extern int gStip;                // 1 = draw sprites see-through (every other pixel)
 
 // this frame's input (set once per frame in main.c)

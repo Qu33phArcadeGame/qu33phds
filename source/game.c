@@ -3,6 +3,7 @@
 #include "assets_mini.h"
 #include "assets_ball.h"
 #include "assets_fidget.h"
+#include "assets_bowl.h"
 
 // ── the website's world (420 x 900) and the realistic field's layout ──────
 #define WORLD_H      900.0f
@@ -77,6 +78,7 @@ static int trackData(int t, const u8 **d, int *len, int *rate, int *frames) {
     if (t == MUS_MINI && pakIs(MINI_PAK)) { *d = ms_music; *len = MS_MUSIC_LEN; *rate = MS_MUSIC_RATE; *frames = MS_MUSIC_FRAMES; return 1; }
     if (t == MUS_BALL && pakIs(BALL_PAK)) { *d = bs_music; *len = BS_MUSIC_LEN; *rate = BS_MUSIC_RATE; *frames = BS_MUSIC_FRAMES; return 1; }
     if (t == MUS_FIDGET && pakIs(FIDGET_PAK)) { *d = fs_music; *len = FS_MUSIC_LEN; *rate = FS_MUSIC_RATE; *frames = FS_MUSIC_FRAMES; return 1; }
+    if (t == MUS_BOWL && pakIs(BOWL_PAK)) { *d = bw_music; *len = BW_MUSIC_LEN; *rate = BW_MUSIC_RATE; *frames = BW_MUSIC_FRAMES; return 1; }
     if (t == MUS_MAIN) { *d = snd_music; *len = SND_MUSIC_LEN; *rate = SND_MUSIC_RATE; *frames = SND_MUSIC_FRAMES; return 1; }
     return 0;
 }
@@ -128,9 +130,17 @@ static void throwMarker(float dx, float dy) {
     memset(m, 0, sizeof *m);
     m->x = FIELD_CX; m->y = LAUNCH_Y;
     m->vx = dx * 0.2f; m->vy = dy * 0.2f; m->curve = dx * 0.0003f;
-    m->rot = orient == 0 ? 1.0472f : orient == 1 ? 1.5708f : 0.0f;
     m->spin = orient == 0 ? 0.08f : orient == 1 ? 0.12f : 0.18f;
     m->col = current; lastThrown = current;
+    // Land in the orientation you picked, whatever the colour or theme: the marker still spins
+    // the website's amount in flight (spin x 22.85 over its one second), but it starts turned so
+    // it comes to rest VERTICAL / ANGLED / FLAT. Each picture's marker lies at its own angle
+    // (red & green diagonal, blue level, the CARTOON ones upright), so that's allowed for too.
+    {
+        float target = orient == 0 ? 1.5708f : orient == 1 ? 0.7854f : 0.0f;
+        float axis = sv.theme == 1 ? 1.5708f : m->col == 2 ? -0.14f : 0.7854f;
+        m->rot = target - axis - m->spin * 22.85f;
+    }
     current++;
     sfxThrow(orient);
 }

@@ -181,7 +181,7 @@ void coinCount(u16 *buf, int x, int y) {
 // background (drawn once when the theme changes, then copied), button colours, accent
 // colours for titles and highlights, and a recoloured logo. The tables and fields are
 // recoloured by the same themeTint the website-style filters are modelled on.
-u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18);
+u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18), uiIcon = COL(19, 19, 20);
 u16 logoT[LOGO_W * LOGO_H];
 static u16 uiEdge = COL(31, 31, 31), uiSel = COL(31, 26, 4), uiGradTop = COL(7, 7, 7), uiGradMid = COL(2, 2, 2), uiGradEnd = COL(0, 0, 0);
 static u16 BTN_GRAD[32];
@@ -226,33 +226,29 @@ void themeUI(int t) {
         for (int j = -14; j <= 14; j++) for (int i = -14; i <= 14; i++) { int d = i * i + j * j, e = (i + 6) * (i + 6) + (j - 4) * (j - 4);
             if (d <= 196 && e > 160) bgPx(222 + i, 30 + j, COL(29, 29, 24)); }
         break;
-    case 3:                                             // SUNSET: purple sky down to orange, a sinking sun
-        uiGold = COL(31, 20, 4); uiYellow = COL(31, 27, 10); uiGrey = COL(27, 19, 17);
-        uiEdge = COL(31, 23, 14); uiSel = COL(31, 30, 12); uiGradTop = COL(15, 5, 8); uiGradMid = COL(6, 1, 4); uiGradEnd = COL(2, 0, 2);
-        bgGrad(COL(7, 2, 10), COL(20, 6, 9), COL(26, 11, 4));
-        for (int j = -40; j <= 40; j++) for (int i = -40; i <= 40; i++) if (i * i + j * j <= 1600) {
-            int gy = 2 * SH - 10 + j; if (gy >= 2 * SH - 10 && (gy / 4) % 2) continue;      // banded at the horizon
-            bgPx(128 + i, gy, mix(COL(31, 28, 10), COL(31, 12, 4), j + 40, 80)); }
-        for (int gy = 0; gy < 2 * SH; gy += 7) for (int x = rnd(40); x < SW; x += 60 + rnd(60)) for (int i = 0; i < 18; i++) bgPx(x + i, gy, mix(COL(31, 16, 10), COL(20, 6, 9), gy, 2 * SH));
-        break;
-    case 4:                                             // NEON: black, a glowing grid, pink and cyan
-        uiGold = COL(31, 10, 28); uiYellow = COL(10, 31, 31); uiGrey = COL(20, 15, 26);
-        uiEdge = COL(31, 8, 27); uiSel = COL(8, 31, 31); uiGradTop = COL(9, 1, 13); uiGradMid = COL(3, 0, 5); uiGradEnd = COL(0, 0, 1);
-        bgGrad(COL(1, 0, 3), COL(3, 0, 6), COL(1, 0, 3));
+    case 4:                                             // NEON: the website's glowing green, on black
+        uiGold = COL(8, 31, 15); uiYellow = COL(20, 31, 24); uiGrey = COL(13, 24, 17);
+        uiEdge = COL(6, 31, 15); uiSel = COL(26, 31, 28); uiGradTop = COL(1, 11, 5); uiGradMid = COL(0, 4, 2); uiGradEnd = COL(0, 1, 0);
+        bgGrad(COL(0, 3, 1), COL(0, 1, 0), COL(0, 3, 1));
         for (int gy = 0; gy < 2 * SH; gy++) for (int x = 0; x < SW; x++) {
-            int gx = x % 24 == 0 || gy % 24 == 0, edge = x < 3 || x >= SW - 3;
-            if (gx) bgPx(x, gy, gy < SH ? COL(9, 1, 13) : COL(1, 8, 12));
-            if (edge) bgPx(x, gy, gy < SH ? COL(31, 8, 27) : COL(8, 31, 31));
+            int g = (x % 24 == 0 || gy % 24 == 0);
+            if (g) bgPx(x, gy, COL(1, 13, 6));
+            int e = x < 4 ? 4 - x : x >= SW - 4 ? x - (SW - 5) : 0;                  // glowing tubes down both edges
+            if (e) bgPx(x, gy, e >= 3 ? COL(4, 20, 10) : COL(14, 31, 20));
         }
+        for (int x = 0; x < SW; x++) for (int k = 0; k < 3; k++) { bgPx(x, SH - 2 + k, COL(8, 31, 16)); }   // a tube along the screen gap
         break;
+    case 3:                                             // (SUNSET shows GOLDEN)
     case 5:                                             // GOLDEN: warm dark gold with sparkle
-        uiGold = COL(31, 26, 6); uiYellow = COL(31, 30, 16); uiGrey = COL(23, 19, 11);
-        uiEdge = COL(31, 25, 8); uiSel = COL(31, 31, 22); uiGradTop = COL(12, 8, 1); uiGradMid = COL(4, 2, 0); uiGradEnd = COL(1, 1, 0);
-        bgGrad(COL(8, 5, 0), COL(4, 2, 0), COL(9, 6, 1));
+        uiGold = COL(31, 27, 6); uiYellow = COL(31, 31, 16); uiGrey = COL(27, 22, 12);
+        uiEdge = COL(31, 26, 6); uiSel = COL(31, 31, 24); uiGradTop = COL(20, 14, 2); uiGradMid = COL(8, 5, 0); uiGradEnd = COL(3, 2, 0);
+        bgGrad(COL(16, 10, 1), COL(7, 4, 0), COL(18, 12, 2));
+        for (int gy = 0; gy < 2 * SH; gy += 3) for (int x = (gy / 3 % 2) * 3; x < SW; x += 6) bgPx(x, gy, COL(24, 17, 3));   // gold-leaf grain
         for (int i = 0; i < 140; i++) { int x = rnd(SW), y = rnd(2 * SH), b = rnd(3);
             bgPx(x, y, COL(31, 28, 12)); if (!b) for (int k = 1; k < 4; k++) { u16 c = COL(28 - k * 4, 22 - k * 4, 6); bgPx(x + k, y, c); bgPx(x - k, y, c); bgPx(x, y + k, c); bgPx(x, y - k, c); } }
         break;
     }
+    uiIcon = t == 1 ? COL(3, 3, 3) : t == 2 ? COL(18, 21, 27) : t == 4 ? COL(9, 31, 15) : (t == 3 || t == 5) ? COL(31, 24, 7) : COL(19, 19, 20);
     for (int i = 0; i < 32; i++) BTN_GRAD[i] = i < 15 ? mix(uiGradTop, uiGradMid, i, 15) : mix(uiGradMid, uiGradEnd, i - 15, 17);
     // the logo takes the theme's colour but stays bright enough to read
     for (int i = 0; i < LOGO_W * LOGO_H; i++) logoT[i] = (logo[i] & 0x8000) ? (t <= 1 ? themeTint(logo[i], t) : mix(logo[i], themeTint(logo[i], t), 1, 2)) : 0;
@@ -443,4 +439,12 @@ void iconPalette(u16 *buf, int x, int y, int s, u16 c) {     // the website's pa
     float k = s / 24.0f; int r = s / 26 + 1;
     for (int i = 1; i < n; i++) thickLine(buf, x + P[i * 2 - 2] * k, y + P[i * 2 - 1] * k, x + P[i * 2] * k, y + P[i * 2 + 1] * k, r, c);
     dot(buf, x + 8 * s / 24, y + 10 * s / 24, s / 18 + 1, c); dot(buf, x + 12 * s / 24, y + (int)(7.5f * k), s / 18 + 1, c); dot(buf, x + 16 * s / 24, y + 10 * s / 24, s / 18 + 1, c);
+}
+
+// a sprite with a solid ink outline round it (so pictures pop on CARTOON's light paper)
+void blitInk(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 ink) {
+    static const signed char O[8][2] = { {-2,0},{2,0},{0,-2},{0,2},{-1,-1},{1,-1},{-1,1},{1,1} };
+    for (int k = 0; k < 8; k++) for (int j = 0; j < h; j++) { int yy = y + j + O[k][1]; if ((unsigned)yy >= SH) continue;
+        for (int i = 0; i < w; i++) { int xx = x + i + O[k][0]; if ((unsigned)xx < SW && (spr[j * w + i] & 0x8000)) buf[yy * SW + xx] = ink; } }
+    blit(buf, spr, w, h, x, y);
 }

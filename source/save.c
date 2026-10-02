@@ -25,7 +25,7 @@ const char *ACH_DESC[ACH_COUNT] = { "Play your first game", "Land all 3 markers 
     "50 PEEFs career total", "Score 10+ in a game", "Score 25+ in a game", "Win any Olympic medal", "Win Olympic gold",
     "Spin the slot machine", "Win on the slot machine", "Hit the slot jackpot", "Earn 100 coins total", "Earn 500 coins total",
     "Unlock a new theme" };
-const char *THEME_NAME[THEME_COUNT] = { "REALISTIC", "CARTOON", "NIGHT", "SUNSET", "NEON", "GOLDEN" };
+const char *THEME_NAME[THEME_COUNT] = { "REALISTIC", "CARTOON", "NIGHT", "GOLDEN", "NEON", "GOLDEN" };   // 3 (SUNSET) became GOLDEN
 
 // ── file ──────────────────────────────────────────────────────────────────
 #ifndef SAVE_TEST_PATH
@@ -54,6 +54,8 @@ void saveInit(void) {
             if (t.magic == SAVE_MAGIC && ((t.version == SAVE_VERSION && n == sizeof t) || (t.version == 1 && n >= SAVE_V1_SIZE))) {
                 if (t.version == 1) memset((char *)&t + SAVE_V1_SIZE, 0, sizeof t - SAVE_V1_SIZE);   // keep all v1 progress
                 sv = t; sv.version = SAVE_VERSION;
+                if (sv.themesOwned & 8) sv.themesOwned |= 32;          // SUNSET merged into GOLDEN
+                if (sv.theme == 3) sv.theme = 5;
             }
             fclose(f); path = PATHS[i]; saveOK = 1;
         } else {
@@ -81,6 +83,7 @@ void unlockAch(int a) {
     sv.coins += 1;                                   // +1 coin per achievement (not doubled, as on the website)
     toast("ACHIEVEMENT UNLOCKED", ACH_NAME[a]);
 }
+void spendCoins(int n) { sv.coins -= n; sv.coinsSpent += n; }
 void addCoins(int n) {
     if (n > 0 && shopActive(SH_DOUBLER)) n *= 2;
     sv.coins += n;
@@ -142,14 +145,41 @@ void applyTheme(void) {
     arcadeThemeChanged();
     themeUI(t);
 }
+// The website's theme filters (CSS filter maths: sepia / saturate / hue-rotate / brightness /
+// contrast), pushed further where asked: NEON is the website's green neon, much more saturated
+// and contrasty; GOLDEN is its golden hour, leaning much harder on the gold. SUNSET was the same
+// look as GOLDEN, so it now shows GOLDEN.
+static void mat3(float m[9], float *r, float *g, float *b) {
+    float R = m[0] * *r + m[1] * *g + m[2] * *b, G = m[3] * *r + m[4] * *g + m[5] * *b, B = m[6] * *r + m[7] * *g + m[8] * *b;
+    *r = R < 0 ? 0 : R > 1 ? 1 : R; *g = G < 0 ? 0 : G > 1 ? 1 : G; *b = B < 0 ? 0 : B > 1 ? 1 : B;
+}
+static void saturate(float s, float *r, float *g, float *b) {
+    float m[9] = { 0.213f + 0.787f * s, 0.715f - 0.715f * s, 0.072f - 0.072f * s, 0.213f - 0.213f * s, 0.715f + 0.285f * s, 0.072f - 0.072f * s,
+                   0.213f - 0.213f * s, 0.715f - 0.715f * s, 0.072f + 0.928f * s };
+    mat3(m, r, g, b);
+}
+static void hueRotate(float deg, float *r, float *g, float *b) {
+    float a = deg * 0.0174533f, c = fcos(a), s = fsin(a);
+    float m[9] = { 0.213f + c * 0.787f - s * 0.213f, 0.715f - c * 0.715f - s * 0.715f, 0.072f - c * 0.072f + s * 0.928f,
+                   0.213f - c * 0.213f + s * 0.143f, 0.715f + c * 0.285f + s * 0.140f, 0.072f - c * 0.072f - s * 0.283f,
+                   0.213f - c * 0.213f - s * 0.787f, 0.715f - c * 0.715f + s * 0.715f, 0.072f + c * 0.928f + s * 0.072f };
+    mat3(m, r, g, b);
+}
+static void sepia(float k, float *r, float *g, float *b) {
+    float m[9] = { 1 - k + k * 0.393f, k * 0.769f, k * 0.189f, k * 0.349f, 1 - k + k * 0.686f, k * 0.168f, k * 0.272f, k * 0.534f, 1 - k + k * 0.131f };
+    mat3(m, r, g, b);
+}
+static void bc(float br, float ct, float *r, float *g, float *b) {          // brightness, then contrast
+    float m[9] = { br * ct, 0, 0, 0, br * ct, 0, 0, 0, br * ct }; float o = 0.5f - 0.5f * ct;
+    *r = *r * br * ct + o; *g = *g * br * ct + o; *b = *b * br * ct + o; (void)m;
+    *r = *r < 0 ? 0 : *r > 1 ? 1 : *r; *g = *g < 0 ? 0 : *g > 1 ? 1 : *g; *b = *b < 0 ? 0 : *b > 1 ? 1 : *b;
+}
 u16 themeTint(u16 p, int t) {
-    int r = p & 31, g = (p >> 5) & 31, b = (p >> 10) & 31, l = (r * 3 + g * 5 + b * 2) / 10;
-    int R, G, B;
-    if (t <= 0)      return p | 0x8000;                                                     // REALISTIC
-    else if (t == 1) { int c = (l - 16) * 12 / 10 + 16; R = G = B = c; }                    // CARTOON (grey, a touch more contrast)
-    else if (t == 2) { R = r * 45 / 100;      G = g * 50 / 100;      B = b * 80 / 100 + 3; }   // NIGHT
-    else if (t == 3) { R = r + 4;             G = g * 75 / 100 + 1;  B = b * 55 / 100; }       // SUNSET
-    else if (t == 4) { R = l * 60 / 100 + (b > r ? 2 : 9); G = g * 40 / 100; B = b * 70 / 100 + 9; }   // NEON
-    else             { R = l * 11 / 10 + 4;   G = l * 9 / 10 + 2;    B = l * 45 / 100; }       // GOLDEN
-    return clamp31(R) | (clamp31(G) << 5) | (clamp31(B) << 10) | 0x8000;
+    if (t <= 0) return p | 0x8000;                                                       // REALISTIC
+    float r = (p & 31) / 31.0f, g = ((p >> 5) & 31) / 31.0f, b = ((p >> 10) & 31) / 31.0f;
+    if (t == 1) { saturate(0, &r, &g, &b); bc(1.0f, 1.18f, &r, &g, &b); }               // CARTOON: grayscale, contrast 1.18
+    else if (t == 2) { r = r * 0.45f; g = g * 0.5f; b = b * 0.8f + 0.1f; }               // NIGHT: moonlit blue
+    else if (t == 4) { hueRotate(95, &r, &g, &b); saturate(3.2f, &r, &g, &b); bc(1.15f, 1.35f, &r, &g, &b); }   // NEON (website: hue 95, sat 2, bright 1.12)
+    else { sepia(1.0f, &r, &g, &b); saturate(3.0f, &r, &g, &b); bc(1.32f, 1.12f, &r, &g, &b); hueRotate(-8, &r, &g, &b); }  // GOLDEN (website: sepia .72, sat 2.1, bright 1.14, hue -8)
+    return COL((int)(r * 31 + 0.5f), (int)(g * 31 + 0.5f), (int)(b * 31 + 0.5f)) | 0x8000;
 }

@@ -73,25 +73,33 @@ static void titleLayout(void) {
     B[7]  = (Btn){ 200, 4, 56, 60, "SETTINGS", 0, 0 };   B[8]  = (Btn){ 200, 66, 56, 60, "THEMES", 0, 0 };
     B[9]  = (Btn){ 0, 4, 56, 60, "SLOT", 0, 0 };         B[10] = (Btn){ 0, 66, 56, 60, "PLINQU33PH", 0, 0 };
     B[11] = (Btn){ 0, 128, 56, 60, "ARCADE", 0, 0 };
+    B[12] = (Btn){ 200, 128, 56, 60, "COINS", 0, 0 };     // the coin count, under THEMES (opens the coin record)
 }
 static void drawIconBtn(int i, int on) {
     Btn *b = &B[i];
-    u16 c = on ? YELLOW : GREY;
+    int cart = sv.theme == 1;
+    u16 c = on ? (cart ? COL(28, 4, 4) : YELLOW) : uiIcon;
     int ix = b->x + b->w / 2, iy = b->y + 4, s = 38, pressed = on && (kHeld & KEY_A) ? 1 : 0;
     iy += pressed;
     if (on) { rect(bufBot, b->x + 3, b->y + 1, b->w - 6, 2, c); rect(bufBot, b->x + 3, b->y + b->h - 3, b->w - 6, 2, c);
               rect(bufBot, b->x + 1, b->y + 3, 2, b->h - 6, c); rect(bufBot, b->x + b->w - 3, b->y + 3, 2, b->h - 6, c); }
-    if (i == 9) blit(bufBot, ic_slot, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy);
-    else if (i == 11) blit(bufBot, ic_arcade, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy);
+    if (i == 9) { if (cart) blitInk(bufBot, ic_slot, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy, BLACK); else blit(bufBot, ic_slot, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy); }
+    else if (i == 11) { if (cart) blitInk(bufBot, ic_arcade, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy, BLACK); else blit(bufBot, ic_arcade, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy); }
     else if (i == 10) iconPlinko(bufBot, ix - s / 2, iy + 1, s, c);
+    else if (i == 12) {                                  // the coin and your balance
+        char v[12]; sprintf(v, "%d", sv.coins);
+        gClipLo = 0; gClipHi = 2 * SH;
+        blitRotScale(coin, COIN_W, COIN_H, ix, iy + 16 + SH, 0, 1.6f);   // (g-space: bottom screen starts at SH)
+        text(bufBot, ix - textW(v, 1) / 2, b->y + b->h - 17 + pressed, v, on ? YELLOW : GOLD, 1);
+        return;
+    }
     else if (i == 7) iconGear(bufBot, ix - s / 2, iy + 1, s, c);
     else iconPalette(bufBot, ix - s / 2, iy + 1, s, c);
-    textS(bufBot, ix - textSW(b->label) / 2, b->y + b->h - 13 + pressed, b->label, on ? YELLOW : (i == 11 ? GOLD : GREY));
+    textS(bufBot, ix - textSW(b->label) / 2, b->y + b->h - 13 + pressed, b->label, on ? c : (i == 11 ? (cart ? COL(24, 10, 0) : GOLD) : uiIcon));
 }
 static void drawTitle(void) {
     fillScreen(bufTop, DARK);
     blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 2);
-    coinCount(bufTop, 8, 8);
     char s[32], a[10];
     if (sv.high1p[0].name[0]) { scoreStr(a, sv.high1p[0].score2); sprintf(s, "HIGH SCORE  %s", a); textC(bufTop, 128, s, WHITE, 1); }
     textC(bufTop, 150, "swipe or D-pad + A to throw", GREY, 1);
@@ -99,32 +107,32 @@ static void drawTitle(void) {
     fillScreen(bufBot, DARK);
     titleLayout();
     drawBtns(bufBot, B, 7, sel < 7 ? sel : -1);
-    for (int i = 7; i < TITLE_N; i++) drawIconBtn(i, i == sel);
+    for (int i = 7; i <= 12; i++) drawIconBtn(i, i == sel);
 }
 // D-pad: up/down within a column; left/right hops between the icons and the middle buttons
 static int titleNav(int cur, int dx, int dy) {
     int cx = B[cur].x + B[cur].w / 2, cy = B[cur].y + B[cur].h / 2, best = cur, bd = 1 << 30;
-    for (int i = 0; i < TITLE_N; i++) { if (i == cur) continue;
+    for (int i = 0; i < 13; i++) { if (i == cur) continue;
         int x = B[i].x + B[i].w / 2 - cx, y = B[i].y + B[i].h / 2 - cy;
         int along = dx ? x * dx : y * dy, across = dx ? (y < 0 ? -y : y) : (x < 0 ? -x : x);
         if (along <= 0 || (dy && across > 30)) continue;
         int d = along + across * 3; if (d < bd) { bd = d; best = i; } }
     if (best == cur && dy) {                              // nothing further that way: wrap round the column
         int far = 0;
-        for (int i = 0; i < TITLE_N; i++) { int x = B[i].x - B[cur].x, y = (B[cur].y - B[i].y) * dy;
+        for (int i = 0; i < 13; i++) { int x = B[i].x - B[cur].x, y = (B[cur].y - B[i].y) * dy;
             if (i != cur && x > -30 && x < 30 && y > far) { far = y; best = i; } }
     }
     return best;
 }
 static void inputTitle(void) {
     titleLayout();
-    if (sel < 0 || sel >= TITLE_N) sel = 0;
+    if (sel < 0 || sel >= 13) sel = 0;
     if (kDown & KEY_UP) sel = titleNav(sel, 0, -1);
     if (kDown & KEY_DOWN) sel = titleNav(sel, 0, 1);
     if (kDown & KEY_LEFT) sel = titleNav(sel, -1, 0);
     if (kDown & KEY_RIGHT) sel = titleNav(sel, 1, 0);
     int keep = kDown; kDown &= ~(KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT);
-    int h = btnInput(B, TITLE_N, &sel, 1);
+    int h = btnInput(B, 13, &sel, 1);
     kDown = keep;
     switch (h) {
         case 0: startSingle(); break;
@@ -139,6 +147,7 @@ static void inputTitle(void) {
         case 9: goScreen(S_SLOT); break;
         case 10: goScreen(S_PLINKO); break;
         case 11: goScreen(S_ARCADE); break;
+        case 12: goScreen(S_COINREC); break;
     }
 }
 
@@ -176,7 +185,7 @@ static void inputShop(void) {
     if (h == SH_COUNT) { goScreen(S_TITLE); return; }
     if (h >= 0) {
         if (sv.shopOwned & (1u << h)) sv.shopOn ^= 1u << h;
-        else if (sv.coins >= SHOP_PRICE[h]) { sv.coins -= SHOP_PRICE[h]; sv.shopOwned |= 1u << h; sv.shopOn |= 1u << h; toast("PURCHASED", SHOP_NAME[h]); }
+        else if (sv.coins >= SHOP_PRICE[h]) { spendCoins(SHOP_PRICE[h]); sv.shopOwned |= 1u << h; sv.shopOn |= 1u << h; toast("PURCHASED", SHOP_NAME[h]); }
         saveWrite();
     }
 }
@@ -320,40 +329,69 @@ static void inputSettings(void) {
 }
 
 // ── themes ────────────────────────────────────────────────────────────────
-static const char *THEME_DESC[THEME_COUNT] = { "the real room photo", "cartoon-style markers", "moonlit blue", "warm evening glow", "electric colours", "gilded sepia" };
+static const char *THEME_DESC[THEME_COUNT] = { "the real room photo", "comic-book halftone", "moonlit blue", "golden hour", "glowing green neon", "golden hour" };
+// SUNSET and GOLDEN were the same look, so the list shows five: REALISTIC, CARTOON, NIGHT, NEON, GOLDEN
+#define TVIS 5
+static const int TV[TVIS] = { 0, 1, 2, 4, 5 };
 static void themesLayout(void) {
-    layoutGrid(THEME_COUNT + 1, 2, 8, 34, 8);
-    for (int i = 0; i < THEME_COUNT; i++) {
+    layoutGrid(TVIS + 1, 2, 8, 34, 8);
+    for (int k = 0; k < TVIS; k++) { int i = TV[k];
         int own = sv.themesOwned & (1u << i);
-        if (i == sv.theme) sprintf(B[i].label, "%s  IN USE", THEME_NAME[i]);
-        else if (own) sprintf(B[i].label, "%s", THEME_NAME[i]);
-        else sprintf(B[i].label, "%s  %d", THEME_NAME[i], THEME_COST);
-        B[i].col = i == sv.theme ? LIME : 0; B[i].dim = !own && sv.coins < THEME_COST;
+        if (i == sv.theme) sprintf(B[k].label, "%s  IN USE", THEME_NAME[i]);
+        else if (own) sprintf(B[k].label, "%s", THEME_NAME[i]);
+        else sprintf(B[k].label, "%s  %d", THEME_NAME[i], THEME_COST);
+        B[k].col = i == sv.theme ? LIME : 0; B[k].dim = !own && sv.coins < THEME_COST;
     }
-    strcpy(B[THEME_COUNT].label, "BACK");
+    strcpy(B[TVIS].label, "BACK");
 }
 static void drawThemes(void) {
     themesLayout();
     fillScreen(bufTop, DARK);
     textC(bufTop, 10, "THEMES", GOLD, 2);
     coinCount(bufTop, 8, 44);
-    if (sel < THEME_COUNT) { textC(bufTop, 90, THEME_NAME[sel], WHITE, 2); textC(bufTop, 126, THEME_DESC[sel], GREY, 1); }
+    if (sel < TVIS) { textC(bufTop, 90, THEME_NAME[TV[sel]], WHITE, 2); textC(bufTop, 126, THEME_DESC[TV[sel]], GREY, 1); }
     textC(bufTop, 160, "tap an owned theme to use it", GREY, 1);
     fillScreen(bufBot, DARK);
-    drawBtns(bufBot, B, THEME_COUNT + 1, sel);
+    drawBtns(bufBot, B, TVIS + 1, sel);
 }
 static void inputThemes(void) {
     themesLayout();
     if (kDown & KEY_B) { goScreen(S_TITLE); return; }
-    int h = btnInput(B, THEME_COUNT + 1, &sel, 2);
-    if (h == THEME_COUNT) { goScreen(S_TITLE); return; }
-    if (h >= 0) {
-        if (!(sv.themesOwned & (1u << h))) {
+    int h = btnInput(B, TVIS + 1, &sel, 2);
+    if (h == TVIS) { goScreen(S_TITLE); return; }
+    if (h >= 0) { int t = TV[h];
+        if (!(sv.themesOwned & (1u << t))) {
             if (sv.coins < THEME_COST) return;
-            sv.coins -= THEME_COST; sv.themesOwned |= 1u << h; unlockAch(A_UNLOCK_THEME);
+            spendCoins(THEME_COST); sv.themesOwned |= 1u << t; unlockAch(A_UNLOCK_THEME);
         }
-        sv.theme = h; applyTheme(); saveWrite();
+        sv.theme = t; applyTheme(); saveWrite();
     }
+}
+
+// ── coin record (the website's: tap the coins under THEMES) ────────────────
+static void drawCoinRecord(void) {
+    char v[16];
+    fillScreen(bufTop, DARK);
+    textC(bufTop, 6, "COIN RECORD", WHITE, 2);
+    gClipLo = 0; gClipHi = 2 * SH;
+    blitRotScale(coin, COIN_W, COIN_H, SW / 2, 110, 0, 4.0f);
+    sprintf(v, "%d", sv.coins); textC(bufTop, 156, v, GOLD, 2);
+    fillScreen(bufBot, DARK);
+    const char *L[7] = { "Current balance", "Coins earned (all time)", "Coins spent (all time)", "Net saved", "Slot machine wins", "Coins lost in slots", "Games forfeited" };
+    int V[7] = { sv.coins, sv.coinsEarned, sv.coinsSpent, sv.coinsEarned - sv.coinsSpent, sv.slotWins, sv.slotLost, sv.forfeits };
+    for (int i = 0; i < 7; i++) {
+        int y = 4 + i * 21;
+        box(bufBot, 6, y, 244, 19, COL(2, 2, 2), COL(5, 5, 5));
+        text(bufBot, 12, y + 3, L[i], COL(23, 23, 23), 1);
+        sprintf(v, "%d", V[i]); text(bufBot, 244 - textW(v, 1), y + 3, v, COL(31, 27, 0), 1);
+    }
+    B[0] = (Btn){ 68, 156, 120, 30, "BACK", 0, 0 };
+    drawBtns(bufBot, B, 1, 0);
+}
+static void inputCoinRecord(void) {
+    B[0] = (Btn){ 68, 156, 120, 30, "BACK", 0, 0 };
+    int s0 = 0;
+    if ((kDown & KEY_B) || btnInput(B, 1, &s0, 1) == 0) goScreen(S_TITLE);
 }
 
 // ── name entry: on-screen keyboard (D-pad + A, or tap; B deletes; START done)
@@ -481,11 +519,16 @@ int main(void) {
             case S_FIDGET_MENU: inputFidgetMenu(); break;
             case S_FIDGET: case S_FIDGET_PAUSE: inputFidget(); if (screen == S_FIDGET) updateFidget(); break;
             case S_FIDGET_OVER: inputFidgetOver(); break;
+            case S_COINREC: inputCoinRecord(); break;
+            case S_BOWL_MENU: inputBowlMenu(); break;
+            case S_BOWL: case S_BOWL_PAUSE: inputBowl(); if (screen == S_BOWL) updateBowl(); break;
+            case S_BOWL_OVER: inputBowlOver(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
         musicSet(screen >= S_MINI_MENU && screen <= S_MINI_OVER ? MUS_MINI : screen >= S_BALL_MENU && screen <= S_BALL_OVER ? MUS_BALL :
-                 screen >= S_FIDGET_MENU && screen <= S_FIDGET_OVER ? MUS_FIDGET : MUS_MAIN);
+                 screen >= S_FIDGET_MENU && screen <= S_FIDGET_OVER ? MUS_FIDGET :
+                 screen >= S_BOWL_MENU && screen <= S_BOWL_OVER ? MUS_BOWL : MUS_MAIN);
         musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
@@ -514,6 +557,10 @@ int main(void) {
             case S_FIDGET_MENU: drawFidgetMenu(); break;
             case S_FIDGET: case S_FIDGET_PAUSE: drawFidget(); break;
             case S_FIDGET_OVER: drawFidgetOver(); break;
+            case S_COINREC: drawCoinRecord(); break;
+            case S_BOWL_MENU: drawBowlMenu(); break;
+            case S_BOWL: case S_BOWL_PAUSE: drawBowl(); break;
+            case S_BOWL_OVER: drawBowlOver(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first
