@@ -210,6 +210,10 @@ static void themeGrad(u16 top, u16 mid, u16 bot) {        // one gradient down b
         for (int x = 0; x < SW; x++) themeBgImg[gy / SH][(gy % SH) * SW + x] = c;
     }
 }
+static u16 bright(u16 c) {                     // +25% and a little lift, clamped
+    int r = (c & 31) * 5 / 4 + 2, g = ((c >> 5) & 31) * 5 / 4 + 2, b = ((c >> 10) & 31) * 5 / 4 + 2;
+    return COL(r > 31 ? 31 : r, g > 31 ? 31 : g, b > 31 ? 31 : b);
+}
 void themeUI(int t) {
     rs = 12345 + t;
     switch (t) {
@@ -270,11 +274,17 @@ void themeUI(int t) {
     for (int i = 0; i < IC_COIN_W * IC_COIN_H; i++)                // the coin keeps more of its gold so it still reads as a coin
         icCoinT[i] = (ic_coin[i] & 0x8000) ? (t <= 1 ? themeTint(ic_coin[i], t) : mix(ic_coin[i], themeTint(ic_coin[i], t), 1, 3)) : 0;
     // every coin picture and the slot machine's symbols take the theme too (CARTOON: grey)
-    #define CTINT(dst, src, n) for (int i = 0; i < (n); i++) dst[i] = (src[i] & 0x8000) ? (t <= 1 ? themeTint(src[i], t) : mix(src[i], themeTint(src[i], t), 1, 3)) : 0;
+    // coins and slot symbols: the theme's colour at full strength, then lifted so they read bright
+    // and lively rather than washed out (CARTOON stays a crisp grey)
+    #define CTINT(dst, src, n) for (int i = 0; i < (n); i++) dst[i] = (src[i] & 0x8000) ? (t <= 1 ? themeTint(src[i], t) : bright(themeTint(src[i], t))) : 0;
     CTINT(coinT, coin, COIN_W * COIN_H)
     CTINT(icCoinBigT, ic_coinbig, IC_COINBIG_W * IC_COINBIG_H)
     { const u16 *S[7] = { slot_logo, slot_mega, slot_coin, slot_chair, slot_red, slot_green, slot_blue };
-      for (int k = 0; k < 7; k++) { CTINT(slotSymT[k], S[k], SLOT_LOGO_W * SLOT_LOGO_H) } }
+      for (int k = 0; k < 7; k++) { CTINT(slotSymT[k], S[k], SLOT_LOGO_W * SLOT_LOGO_H) }
+      // NEON: the symbols glow like lit tubes on the reels' black glass: lift them hard again
+      if (t == 4) for (int k = 0; k < 7; k++) for (int i = 0; i < SLOT_LOGO_W * SLOT_LOGO_H; i++) {
+          u16 c = slotSymT[k][i]; int lum = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31);
+          if (lum > 12) slotSymT[k][i] = bright(bright(c)); } }
     #undef CTINT
     #undef TINT
     uiDotRed = t <= 0 ? COL(31, 10, 10) : themeTint(COL(31, 10, 10), t);

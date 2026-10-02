@@ -529,13 +529,18 @@ int main(void) {
             case S_STACK_MENU: inputStackMenu(); break;
             case S_STACK: case S_STACK_PAUSE: inputStack(); if (screen == S_STACK) updateStack(); break;
             case S_STACK_OVER: inputStackOver(); updateStack(); break;
+            case S_FLIP_MENU: inputFlipMenu(); break;
+            case S_FLIP_LEVELS: inputFlipLevels(); break;
+            case S_FLIP: case S_FLIP_PAUSE: inputFlip(); if (screen == S_FLIP) updateFlip(); break;
+            case S_FLIP_OVER: inputFlipOver(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
         musicSet(screen >= S_MINI_MENU && screen <= S_MINI_OVER ? MUS_MINI : screen >= S_BALL_MENU && screen <= S_BALL_OVER ? MUS_BALL :
                  screen >= S_FIDGET_MENU && screen <= S_FIDGET_OVER ? MUS_FIDGET :
                  screen >= S_BOWL_MENU && screen <= S_BOWL_OVER ? MUS_BOWL :
-                 screen >= S_STACK_MENU && screen <= S_STACK_OVER ? MUS_STACK : MUS_MAIN);
+                 screen >= S_STACK_MENU && screen <= S_STACK_OVER ? MUS_STACK :
+                 screen >= S_FLIP_MENU && screen <= S_FLIP_OVER ? MUS_FLIP : MUS_MAIN);
         musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
@@ -571,6 +576,10 @@ int main(void) {
             case S_STACK_MENU: drawStackMenu(); break;
             case S_STACK: case S_STACK_PAUSE: drawStack(); break;
             case S_STACK_OVER: drawStackOver(); break;
+            case S_FLIP_MENU: drawFlipMenu(); break;
+            case S_FLIP_LEVELS: drawFlipLevels(); break;
+            case S_FLIP: case S_FLIP_PAUSE: drawFlip(); break;
+            case S_FLIP_OVER: drawFlipOver(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first

@@ -19,7 +19,7 @@
 #define MW 29.0f                                   // WW*0.115
 #define PLATE_W 102.0f                             // WW*0.40
 #define PLATE_Y 346.0f                             // CH*0.90
-#define GRAV 300.0f                                // px/s^2 (the website's 0.8 at its scale)
+#define GRAV 640.0f                                // px/s^2: about twice the website's pull, so the DS plays snappier
 #define LOOSE 4                                    // how many of the top placed markers stay loose
 #define MAXB 160
 
@@ -214,7 +214,7 @@ static void startGame(void) {
 }
 static void gameOver(void) {
     if (state == ST_OVER) return;
-    state = ST_OVER; overT = 80;
+    state = ST_OVER; overT = 50;
     // let the top of the tower come down (the rest stays where it was buried)
     int from = nPlaced - 8 < 0 ? 0 : nPlaced - 8;
     for (int i = from; i < nPlaced; i++) setMass(&B[placed[i]], 0);
@@ -231,7 +231,7 @@ static float clampX(float x) { float h = (horizontal ? ML : MW) * 0.5f; return x
 void updateStack(void) {
     if (state == ST_PLAY && cur >= 0 && B[cur].held && haveTarget) {        // the held marker follows your finger
         Body *b = &B[cur];
-        b->p.x += (target.x - b->p.x) * 0.16f; b->p.y += (target.y - b->p.y) * 0.16f;
+        b->p.x += (target.x - b->p.x) * 0.35f; b->p.y += (target.y - b->p.y) * 0.35f;   // follows your finger quickly
         b->a = baseAngle(); b->v = v2(0, 0); b->w = 0;
     }
     physGrav = state == ST_OVER ? GRAV * 2.5f : GRAV;
@@ -243,7 +243,7 @@ void updateStack(void) {
         else {
             float sp = fsqrt(b->v.x * b->v.x + b->v.y * b->v.y) / 21.6f + fabs_(b->w) * 0.5f;
             if (sp < 0.4f) b->settle++; else b->settle = 0;
-            if (b->settle > 16) {
+            if (b->settle > 7) {                                   // settled: next marker straight away
                 placed[nPlaced++] = cur; score = nPlaced; sfxPlop();
                 if (nPlaced > LOOSE) setMass(&B[placed[nPlaced - LOOSE - 1]], 1);   // buried: lock it in place
                 cur = -1; spawn();
@@ -258,12 +258,12 @@ void updateStack(void) {
         float mn = ty, mx = PLATE_Y;
         for (int i = 0; i < nB; i++) if (B[i].used) { if (B[i].p.y < mn) mn = B[i].p.y; if (B[i].p.y > mx && B[i].p.y < PLATE_Y + 300) mx = B[i].p.y; }
         float Hf = mx - mn + ML * 2.4f; if (Hf < CH * 0.5f) Hf = CH * 0.5f;
-        float ts = CH * 0.82f / Hf; ts = ts < 0.4f ? 0.4f : ts > 1 ? 1 : ts;
-        camScale += (ts - camScale) * 0.09f; camY += ((CH * 0.5f - (mn + mx) / 2 * camScale) - camY) * 0.09f;
+        float ts = CH * 0.82f / Hf;      // (pulls back faster too) ts = ts < 0.4f ? 0.4f : ts > 1 ? 1 : ts;
+        camScale += (ts - camScale) * 0.15f; camY += ((CH * 0.5f - (mn + mx) / 2 * camScale) - camY) * 0.15f;
         if (overT > 0 && --overT == 0) screen = S_STACK_OVER;
     } else {
         float t = CH * 0.28f - ty; if (t < 0) t = 0;
-        camScale += (1 - camScale) * 0.12f; camY += (t - camY) * 0.12f;
+        camScale += (1 - camScale) * 0.2f; camY += (t - camY) * 0.2f;
     }
 }
 
@@ -298,10 +298,10 @@ void inputStack(void) {
     } else if (kHeld & (KEY_LEFT | KEY_RIGHT | KEY_UP | KEY_DOWN)) {          // buttons: steer it
         if (!haveTarget) { target = b->p; haveTarget = 1; }
         b->held = 1;
-        if (kHeld & KEY_LEFT) target.x -= 2.5f;
-        if (kHeld & KEY_RIGHT) target.x += 2.5f;
-        if (kHeld & KEY_UP) target.y -= 2.5f;
-        if (kHeld & KEY_DOWN) target.y += 2.5f;
+        if (kHeld & KEY_LEFT) target.x -= 4.5f;
+        if (kHeld & KEY_RIGHT) target.x += 4.5f;
+        if (kHeld & KEY_UP) target.y -= 4.5f;
+        if (kHeld & KEY_DOWN) target.y += 4.5f;
         target.x = clampX(target.x); if (target.y > lowest) target.y = lowest;
     }
     if ((kUp & KEY_TOUCH) || (kDown & KEY_A)) {                                 // let go: it drops

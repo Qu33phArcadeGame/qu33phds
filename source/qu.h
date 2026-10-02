@@ -28,7 +28,8 @@ enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, 
        S_BALL_MENU, S_BALL, S_BALL_PAUSE, S_BALL_OVER,
        S_FIDGET_MENU, S_FIDGET, S_FIDGET_PAUSE, S_FIDGET_OVER, S_COINREC,
        S_BOWL_MENU, S_BOWL, S_BOWL_PAUSE, S_BOWL_OVER,
-       S_STACK_MENU, S_STACK, S_STACK_PAUSE, S_STACK_OVER };
+       S_STACK_MENU, S_STACK, S_STACK_PAUSE, S_STACK_OVER,
+       S_FLIP_MENU, S_FLIP_LEVELS, S_FLIP, S_FLIP_PAUSE, S_FLIP_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -50,7 +51,9 @@ typedef struct {
     int arcadeBest[16], arcadePlays[16];     // one slot per arcade game (see ARC_* in arcade.c)
     int ballBest[3];                         // Qu33ph-Ball: best on each machine (was spare room, so old saves read 0)
     int coinsSpent, slotLost;                // the coin record (were spare room, so old saves read 0)
-    u32 spare[11];                           // room to grow without another version bump
+    int flipDone, flipBest, flipBestP;       // Flip: levels cleared, best score, furthest pad (were spare room)
+    u32 flipTiers[3];                        // Flip: each level's marker (2 bits a level: 0 none, 1 red, 2 green, 3 blue)
+    u32 spare[5];                            // room to grow without another version bump
 } SaveData;
 extern SaveData sv;
 extern int saveOK;               // 1 if the microSD card can be written
@@ -128,7 +131,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void); void musicToggle(void);
-enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK };
+enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK, MUS_FLIP };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks
 void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
@@ -198,6 +201,11 @@ int  stackEnter(void); void stackThemeChanged(void);
 void drawStackMenu(void); void inputStackMenu(void);
 void drawStack(void); void inputStack(void); void updateStack(void);
 void drawStackOver(void); void inputStackOver(void);
+// Flip (flip.c)
+int  flipEnter(void); void flipThemeChanged(void);
+void drawFlipMenu(void); void inputFlipMenu(void); void drawFlipLevels(void); void inputFlipLevels(void);
+void drawFlip(void); void inputFlip(void); void updateFlip(void);
+void drawFlipOver(void); void inputFlipOver(void);
 extern int gStip; extern u16 gSil; extern int gGlowShop;
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col);                // 1 = draw sprites see-through (every other pixel)
 

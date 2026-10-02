@@ -193,7 +193,9 @@ void drawSlot(void) {
     coinCount(bufTop, 6, 170);
     fillScreen(bufBot, DARK);
     box(bufBot, 34, 14, 188, 72, BLACK, GOLD);
-    for (int i = 0; i < 3; i++) blit(bufBot, SYM[reel[i]], 52, 52, 44 + i * 58, 24);
+    for (int i = 0; i < 3; i++) {
+        blit(bufBot, SYM[reel[i]], 52, 52, 44 + i * 58, 24);
+    }
     char s[32];
     if (lastWin) { sprintf(s, "%s  +%d", lastLabel, lastWin); textC(bufBot, 94, s, LIME, 1); }
     else if (lastLabel[0]) textC(bufBot, 94, lastLabel, GREY, 1);
@@ -297,10 +299,10 @@ void drawPlinko(void) {
     // the real markers, drawn on the bottom screen (gy 192+ = bottom), spinning as they fall
     // CARTOON uses the cartoon markers (with their bold colour outline); every theme gets its finish
     int cart = sv.theme == 1;
-    const u16 *PS[3] = { cart ? mkc_red : pm_red, cart ? mkc_green : pm_green, cart ? mkc_blue : pm_blue };
-    const int PW[3] = { cart ? MKC_RED_W : PM_RED_W, cart ? MKC_GREEN_W : PM_GREEN_W, cart ? MKC_BLUE_W : PM_BLUE_W },
-              PH[3] = { cart ? MKC_RED_H : PM_RED_H, cart ? MKC_GREEN_H : PM_GREEN_H, cart ? MKC_BLUE_H : PM_BLUE_H };
-    float sc = cart ? 30.0f / MKC_RED_W : 1.0f;
+    const u16 *PS[3] = { cart ? pmc_red : pm_red, cart ? pmc_green : pm_green, cart ? pmc_blue : pm_blue };
+    const int PW[3] = { cart ? PMC_RED_W : PM_RED_W, cart ? PMC_GREEN_W : PM_GREEN_W, cart ? PMC_BLUE_W : PM_BLUE_W },
+              PH[3] = { cart ? PMC_RED_H : PM_RED_H, cart ? PMC_GREEN_H : PM_GREEN_H, cart ? PMC_BLUE_H : PM_BLUE_H };
+    float sc = 1.0f;                     // CARTOON: the cartoon markers at their own, readable size
     gClipLo = SH; gClipHi = 2 * SH;
     for (int i = 0; i < 3; i++) if (balls[i].live || balls[i].done) drawMarkerFx(PS[i], PW[i], PH[i], (int)balls[i].x, SH + (int)balls[i].y, balls[i].rot, sc, i);
     if (dropIdx < 3) drawMarkerFx(PS[dropIdx], PW[dropIdx], PH[dropIdx], aimX, SH + 12, 1.5708f, sc, dropIdx);

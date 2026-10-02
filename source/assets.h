@@ -76,6 +76,15 @@ extern const u16 ic_coin[900];
 extern const u16 ic_coinbig[5184];
 #define IC_COINBIG_W 72
 #define IC_COINBIG_H 72
+extern const u16 pmc_red[570];
+#define PMC_RED_W 15
+#define PMC_RED_H 38
+extern const u16 pmc_green[532];
+#define PMC_GREEN_W 14
+#define PMC_GREEN_H 38
+extern const u16 pmc_blue[456];
+#define PMC_BLUE_W 12
+#define PMC_BLUE_H 38
 extern const u16 fonts_rows[950];
 #define FONTS_H 10
 extern const unsigned char fonts_w[95];
