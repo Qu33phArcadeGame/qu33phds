@@ -65,6 +65,29 @@ static void layoutGrid(int n, int cols, int y0, int h, int gap) {
     int w = (SW - 8 - (cols - 1) * 4) / cols;
     for (int i = 0; i < n; i++) { B[i].x = 4 + (i % cols) * (w + 4); B[i].y = y0 + (i / cols) * (h + gap); B[i].w = w; B[i].h = h; B[i].col = 0; B[i].dim = 0; }
 }
+// The website's title: the main buttons down the middle, with the icon buttons at the sides:
+// SLOT, PLINQU33PH and ARCADE on the left, SETTINGS and THEMES on the right.
+// (Button numbers stay as before: 0-6 the middle, 7 settings, 8 themes, 9 slot, 10 plinko, 11 arcade.)
+static void titleLayout(void) {
+    for (int i = 0; i < 7; i++) { B[i] = (Btn){ 58, 4 + i * 27, 140, 24, "", 0, 0 }; strcpy(B[i].label, TITLE_ITEMS[i]); }
+    B[7]  = (Btn){ 200, 4, 56, 60, "SETTINGS", 0, 0 };   B[8]  = (Btn){ 200, 66, 56, 60, "THEMES", 0, 0 };
+    B[9]  = (Btn){ 0, 4, 56, 60, "SLOT", 0, 0 };         B[10] = (Btn){ 0, 66, 56, 60, "PLINQU33PH", 0, 0 };
+    B[11] = (Btn){ 0, 128, 56, 60, "ARCADE", 0, 0 };
+}
+static void drawIconBtn(int i, int on) {
+    Btn *b = &B[i];
+    u16 c = on ? YELLOW : GREY;
+    int ix = b->x + b->w / 2, iy = b->y + 4, s = 38, pressed = on && (kHeld & KEY_A) ? 1 : 0;
+    iy += pressed;
+    if (on) { rect(bufBot, b->x + 3, b->y + 1, b->w - 6, 2, c); rect(bufBot, b->x + 3, b->y + b->h - 3, b->w - 6, 2, c);
+              rect(bufBot, b->x + 1, b->y + 3, 2, b->h - 6, c); rect(bufBot, b->x + b->w - 3, b->y + 3, 2, b->h - 6, c); }
+    if (i == 9) blit(bufBot, ic_slot, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy);
+    else if (i == 11) blit(bufBot, ic_arcade, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy);
+    else if (i == 10) iconPlinko(bufBot, ix - s / 2, iy + 1, s, c);
+    else if (i == 7) iconGear(bufBot, ix - s / 2, iy + 1, s, c);
+    else iconPalette(bufBot, ix - s / 2, iy + 1, s, c);
+    textS(bufBot, ix - textSW(b->label) / 2, b->y + b->h - 13 + pressed, b->label, on ? YELLOW : (i == 11 ? GOLD : GREY));
+}
 static void drawTitle(void) {
     fillScreen(bufTop, DARK);
     blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 2);
@@ -74,14 +97,35 @@ static void drawTitle(void) {
     textC(bufTop, 150, "swipe or D-pad + A to throw", GREY, 1);
     textC(bufTop, 166, saveOK ? "progress saves to your SD card" : "no SD card: progress not saved", saveOK ? GREY : RED, 1);
     fillScreen(bufBot, DARK);
-    layoutGrid(TITLE_N, 2, 4, 27, 4);
-    for (int i = 0; i < TITLE_N; i++) strcpy(B[i].label, TITLE_ITEMS[i]);
-    B[11].col = GOLD;
-    drawBtns(bufBot, B, TITLE_N, sel);
+    titleLayout();
+    drawBtns(bufBot, B, 7, sel < 7 ? sel : -1);
+    for (int i = 7; i < TITLE_N; i++) drawIconBtn(i, i == sel);
+}
+// D-pad: up/down within a column; left/right hops between the icons and the middle buttons
+static int titleNav(int cur, int dx, int dy) {
+    int cx = B[cur].x + B[cur].w / 2, cy = B[cur].y + B[cur].h / 2, best = cur, bd = 1 << 30;
+    for (int i = 0; i < TITLE_N; i++) { if (i == cur) continue;
+        int x = B[i].x + B[i].w / 2 - cx, y = B[i].y + B[i].h / 2 - cy;
+        int along = dx ? x * dx : y * dy, across = dx ? (y < 0 ? -y : y) : (x < 0 ? -x : x);
+        if (along <= 0 || (dy && across > 30)) continue;
+        int d = along + across * 3; if (d < bd) { bd = d; best = i; } }
+    if (best == cur && dy) {                              // nothing further that way: wrap round the column
+        int far = 0;
+        for (int i = 0; i < TITLE_N; i++) { int x = B[i].x - B[cur].x, y = (B[cur].y - B[i].y) * dy;
+            if (i != cur && x > -30 && x < 30 && y > far) { far = y; best = i; } }
+    }
+    return best;
 }
 static void inputTitle(void) {
-    layoutGrid(TITLE_N, 2, 4, 27, 4);
-    int h = btnInput(B, TITLE_N, &sel, 2);
+    titleLayout();
+    if (sel < 0 || sel >= TITLE_N) sel = 0;
+    if (kDown & KEY_UP) sel = titleNav(sel, 0, -1);
+    if (kDown & KEY_DOWN) sel = titleNav(sel, 0, 1);
+    if (kDown & KEY_LEFT) sel = titleNav(sel, -1, 0);
+    if (kDown & KEY_RIGHT) sel = titleNav(sel, 1, 0);
+    int keep = kDown; kDown &= ~(KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT);
+    int h = btnInput(B, TITLE_N, &sel, 1);
+    kDown = keep;
     switch (h) {
         case 0: startSingle(); break;
         case 1: startTwo(); break;
@@ -434,10 +478,14 @@ int main(void) {
             case S_BALL_MENU: inputBallMenu(); break;
             case S_BALL: case S_BALL_PAUSE: inputBall(); if (screen == S_BALL) updateBall(); break;
             case S_BALL_OVER: inputBallOver(); break;
+            case S_FIDGET_MENU: inputFidgetMenu(); break;
+            case S_FIDGET: case S_FIDGET_PAUSE: inputFidget(); if (screen == S_FIDGET) updateFidget(); break;
+            case S_FIDGET_OVER: inputFidgetOver(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
-        musicSet(screen >= S_MINI_MENU && screen <= S_MINI_OVER ? MUS_MINI : screen >= S_BALL_MENU && screen <= S_BALL_OVER ? MUS_BALL : MUS_MAIN);
+        musicSet(screen >= S_MINI_MENU && screen <= S_MINI_OVER ? MUS_MINI : screen >= S_BALL_MENU && screen <= S_BALL_OVER ? MUS_BALL :
+                 screen >= S_FIDGET_MENU && screen <= S_FIDGET_OVER ? MUS_FIDGET : MUS_MAIN);
         musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
@@ -463,6 +511,9 @@ int main(void) {
             case S_BALL_MENU: drawBallMenu(); break;
             case S_BALL: case S_BALL_PAUSE: drawBall(); break;
             case S_BALL_OVER: drawBallOver(); break;
+            case S_FIDGET_MENU: drawFidgetMenu(); break;
+            case S_FIDGET: case S_FIDGET_PAUSE: drawFidget(); break;
+            case S_FIDGET_OVER: drawFidgetOver(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first

@@ -2,6 +2,7 @@
 #include "qu.h"
 #include "assets_mini.h"
 #include "assets_ball.h"
+#include "assets_fidget.h"
 
 // ── the website's world (420 x 900) and the realistic field's layout ──────
 #define WORLD_H      900.0f
@@ -75,6 +76,7 @@ static int musicTrack = MUS_MAIN, musicT;
 static int trackData(int t, const u8 **d, int *len, int *rate, int *frames) {
     if (t == MUS_MINI && pakIs(MINI_PAK)) { *d = ms_music; *len = MS_MUSIC_LEN; *rate = MS_MUSIC_RATE; *frames = MS_MUSIC_FRAMES; return 1; }
     if (t == MUS_BALL && pakIs(BALL_PAK)) { *d = bs_music; *len = BS_MUSIC_LEN; *rate = BS_MUSIC_RATE; *frames = BS_MUSIC_FRAMES; return 1; }
+    if (t == MUS_FIDGET && pakIs(FIDGET_PAK)) { *d = fs_music; *len = FS_MUSIC_LEN; *rate = FS_MUSIC_RATE; *frames = FS_MUSIC_FRAMES; return 1; }
     if (t == MUS_MAIN) { *d = snd_music; *len = SND_MUSIC_LEN; *rate = SND_MUSIC_RATE; *frames = SND_MUSIC_FRAMES; return 1; }
     return 0;
 }

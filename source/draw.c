@@ -393,3 +393,54 @@ void drawToast(void) {
     textC(bufTop, 146, toastA, GOLD, 1);
     if (toastB[0]) textC(bufTop, 163, toastB, WHITE, 1);
 }
+
+// ── the main menu's side icons (the website's SLOT / PLINQU33PH / ARCADE and SETTINGS / THEMES) ──
+int textSW(const char *t) { int w = 0; for (; *t; t++) { int ch = *t; if (ch < 32 || ch > 126) ch = '?'; w += fonts_w[ch - 32]; } return w; }
+void textS(u16 *buf, int x, int y, const char *t, u16 col) {                     // small caption font, no outline
+    for (; *t; t++) {
+        int ch = *t; if (ch < 32 || ch > 126) ch = '?';
+        const u16 *rows = &fonts_rows[(ch - 32) * FONTS_H];
+        for (int j = 0; j < FONTS_H; j++) { int py = y + j; if ((unsigned)py >= SH) continue;
+            for (u32 m = rows[j]; m; m &= m - 1) { int px = x + __builtin_ctz(m); if ((unsigned)px < SW) buf[py * SW + px] = col; } }
+        x += fonts_w[ch - 32];
+    }
+}
+static void dot(u16 *buf, int cx, int cy, int r, u16 c) {
+    for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) if (i * i + j * j <= r * r + r / 2) { int x = cx + i, y = cy + j; if ((unsigned)x < SW && (unsigned)y < SH) buf[y * SW + x] = c; }
+}
+static void thickLine(u16 *buf, float x0, float y0, float x1, float y1, int r, u16 c) {
+    int n = (int)(fabsf_(x1 - x0) + fabsf_(y1 - y0)) + 1;
+    for (int i = 0; i <= n; i++) dot(buf, (int)(x0 + (x1 - x0) * i / n + 0.5f), (int)(y0 + (y1 - y0) * i / n + 0.5f), r, c);
+}
+// The website's icons are 24x24 SVGs; here each unit is s/24 of the icon's size.
+void iconPlinko(u16 *buf, int x, int y, int s, u16 c) {
+    static const signed char P[8][2] = { {6,6},{12,6},{18,6},{9,11},{15,11},{6,16},{12,16},{18,16} };
+    for (int i = 0; i < 8; i++) dot(buf, x + P[i][0] * s / 24, y + P[i][1] * s / 24, s / 16, c);
+    dot(buf, x + 12 * s / 24, y + 21 * s / 24, s / 10, COL(31, 10, 10));
+}
+void iconGear(u16 *buf, int x, int y, int s, u16 c) {
+    float k = s / 24.0f; int r = s / 22 + 1;
+    for (int j = -3 * s / 24 - 1; j <= 3 * s / 24 + 1; j++) for (int i = -3 * s / 24 - 1; i <= 3 * s / 24 + 1; i++) {
+        int d = i * i + j * j, R = 3 * s / 24; if (d <= (R + 1) * (R + 1) && d >= (R - 1) * (R - 1)) dot(buf, x + 12 * s / 24 + i, y + 12 * s / 24 + j, 0, c); }
+    static const float L[8][4] = { {12,3,12,5},{12,19,12,21},{3,12,5,12},{19,12,21,12},{5.6f,5.6f,7,7},{17,17,18.4f,18.4f},{18.4f,5.6f,17,7},{7,17,5.6f,18.4f} };
+    for (int i = 0; i < 8; i++) thickLine(buf, x + L[i][0] * k, y + L[i][1] * k, x + L[i][2] * k, y + L[i][3] * k, r, c);
+}
+static void bez(float *o, int *n, float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3) {
+    for (int i = 1; i <= 6; i++) { float t = i / 6.0f, u = 1 - t;
+        o[*n * 2] = u*u*u*x0 + 3*u*u*t*x1 + 3*u*t*t*x2 + t*t*t*x3; o[*n * 2 + 1] = u*u*u*y0 + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y3; (*n)++; }
+}
+void iconPalette(u16 *buf, int x, int y, int s, u16 c) {     // the website's palette path, traced
+    static float P[100]; static int n;
+    if (!n) {
+        for (int i = 0; i <= 16; i++) { float t = -1.5707963f - i * 3.1415927f / 16; P[n * 2] = 12 + 9 * fcos(t); P[n * 2 + 1] = 12 + 9 * fsin(t); n++; }
+        bez(P, &n, 12, 21, 13.4f, 21, 14, 20, 14, 19);
+        bez(P, &n, 14, 19, 14, 17.6f, 15, 17, 16.4f, 17);
+        P[n * 2] = 19; P[n * 2 + 1] = 17; n++;
+        for (int i = 1; i <= 4; i++) { float t = 1.5707963f - i * 1.5707963f / 4; P[n * 2] = 19 + 3 * fcos(t); P[n * 2 + 1] = 14 + 3 * fsin(t); n++; }
+        bez(P, &n, 22, 14, 22, 9, 17.5f, 5, 12, 5);   // (the website's path ends at 12,5 and closes to 12,3)
+        P[n * 2] = 12; P[n * 2 + 1] = 3; n++;
+    }
+    float k = s / 24.0f; int r = s / 26 + 1;
+    for (int i = 1; i < n; i++) thickLine(buf, x + P[i * 2 - 2] * k, y + P[i * 2 - 1] * k, x + P[i * 2] * k, y + P[i * 2 + 1] * k, r, c);
+    dot(buf, x + 8 * s / 24, y + 10 * s / 24, s / 18 + 1, c); dot(buf, x + 12 * s / 24, y + (int)(7.5f * k), s / 18 + 1, c); dot(buf, x + 16 * s / 24, y + 10 * s / 24, s / 18 + 1, c);
+}

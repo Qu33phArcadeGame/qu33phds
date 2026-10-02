@@ -24,7 +24,8 @@ extern u16 uiGold, uiYellow, uiGrey;
 enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, S_HIGHS,
        S_SETTINGS, S_THEMES, S_SLOT, S_PLINKO, S_OLY_SELECT, S_OLY_BRACKET, S_NAME,
        S_ARCADE, S_MINI_MENU, S_MINI, S_MINI_PAUSE, S_MINI_OVER,
-       S_BALL_MENU, S_BALL, S_BALL_PAUSE, S_BALL_OVER };
+       S_BALL_MENU, S_BALL, S_BALL_PAUSE, S_BALL_OVER,
+       S_FIDGET_MENU, S_FIDGET, S_FIDGET_PAUSE, S_FIDGET_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -96,6 +97,8 @@ void drawIndexed(const u8 *idx, const u16 *pal);
 void themeUI(int t);             // every screen's look for theme t: backgrounds, buttons, accents, logo
 extern u16 logoT[LOGO_W * LOGO_H];   // both screens from a 256-colour picture
 void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad);
+int textSW(const char *t); void textS(u16 *buf, int x, int y, const char *t, u16 col);
+void iconPlinko(u16 *buf, int x, int y, int s, u16 c); void iconGear(u16 *buf, int x, int y, int s, u16 c); void iconPalette(u16 *buf, int x, int y, int s, u16 c);
 void powerMarker(int x0, int gy0, float ux, float uy, float len, float power);
 void rect(u16 *buf, int x, int y, int w, int h, u16 c);
 int  textW(const char *t, int sc);
@@ -117,7 +120,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void);
-enum { MUS_MAIN, MUS_MINI, MUS_BALL };
+enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks
 void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
@@ -172,6 +175,11 @@ void ballThemeChanged(void);
 void drawBallMenu(void); void inputBallMenu(void);
 void drawBall(void); void inputBall(void); void updateBall(void);
 void drawBallOver(void); void inputBallOver(void);
+// Fidget (fidget.c)
+int  fidgetEnter(void); void fidgetThemeChanged(void);
+void drawFidgetMenu(void); void inputFidgetMenu(void);
+void drawFidget(void); void inputFidget(void); void updateFidget(void);
+void drawFidgetOver(void); void inputFidgetOver(void);
 extern int gStip;                // 1 = draw sprites see-through (every other pixel)
 
 // this frame's input (set once per frame in main.c)

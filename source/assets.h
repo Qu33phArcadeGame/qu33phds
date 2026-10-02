@@ -64,6 +64,15 @@ extern const u16 slot_blue[2704];
 extern const u16 font_rows[1330];
 #define FONT_H 14
 extern const unsigned char font_w[95];
+extern const u16 ic_slot[1280];
+#define IC_SLOT_W 32
+#define IC_SLOT_H 40
+extern const u16 ic_arcade[880];
+#define IC_ARCADE_W 22
+#define IC_ARCADE_H 40
+extern const u16 fonts_rows[950];
+#define FONTS_H 10
+extern const unsigned char fonts_w[95];
 extern const u8 snd_vertical1[18268];
 #define SND_VERTICAL1_LEN 18268
 #define SND_VERTICAL1_RATE 16000
