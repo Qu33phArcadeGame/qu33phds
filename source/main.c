@@ -68,6 +68,9 @@ static void layoutGrid(int n, int cols, int y0, int h, int gap) {
 // The website's title: the main buttons down the middle, with the icon buttons at the sides:
 // SLOT, PLINQU33PH and ARCADE on the left, SETTINGS and THEMES on the right.
 // (Button numbers stay as before: 0-6 the middle, 7 settings, 8 themes, 9 slot, 10 plinko, 11 arcade.)
+static void logoBlit(int x, int y) {        // NEON: the logo glows like a lit sign
+    if (sv.theme == 4) blitGlow(bufTop, logoT, LOGO_W, LOGO_H, x, y, COL(8, 31, 15)); else blit(bufTop, logoT, LOGO_W, LOGO_H, x, y);
+}
 static void titleLayout(void) {
     for (int i = 0; i < 7; i++) { B[i] = (Btn){ 58, 4 + i * 27, 140, 24, "", 0, 0 }; strcpy(B[i].label, TITLE_ITEMS[i]); }
     B[7]  = (Btn){ 200, 4, 56, 60, "SETTINGS", 0, 0 };   B[8]  = (Btn){ 200, 66, 56, 60, "THEMES", 0, 0 };
@@ -102,7 +105,7 @@ static void drawIconBtn(int i, int on) {
 }
 static void drawTitle(void) {
     fillScreen(bufTop, DARK);
-    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 2);
+    logoBlit( (SW - LOGO_W) / 2, 2);
     char s[32], a[10];
     if (sv.high1p[0].name[0]) { scoreStr(a, sv.high1p[0].score2); sprintf(s, "HIGH SCORE  %s", a); textC(bufTop, 128, s, WHITE, 1); }
     textC(bufTop, 150, "swipe or D-pad + A to throw", GREY, 1);
@@ -435,7 +438,7 @@ static void inputName(void) {
 static void drawResults(void) {
     char s[40], a[10], b[10];
     fillScreen(bufTop, DARK);
-    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0);
+    logoBlit( (SW - LOGO_W) / 2, 0);
     if (mode == M_SINGLE) {
         scoreStr(a, score2[0]); sprintf(s, "FINAL SCORE  %s", a); textC(bufTop, 124, s, YELLOW, 2);
         if (resultsNewBest) textC(bufTop, 158, "NEW PERSONAL BEST!", LIME, 1);
@@ -459,7 +462,7 @@ static void inputResults(void) {
 static void drawHandoff(void) {
     char s[32];
     fillScreen(bufTop, DARK);
-    blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 4);
+    logoBlit( (SW - LOGO_W) / 2, 4);
     sprintf(s, "PLAYER %d", player + 1); textC(bufTop, 132, s, YELLOW, 2);
     sprintf(s, "ROUND %d / %d", p2Round, sv.twoRounds); textC(bufTop, 168, s, WHITE, 1);
     fillScreen(bufBot, DARK);
@@ -533,6 +536,9 @@ int main(void) {
             case S_FLIP_LEVELS: inputFlipLevels(); break;
             case S_FLIP: case S_FLIP_PAUSE: inputFlip(); if (screen == S_FLIP) updateFlip(); break;
             case S_FLIP_OVER: inputFlipOver(); break;
+            case S_DOZER_MENU: inputDozerMenu(); break;
+            case S_DOZER: case S_DOZER_PAUSE: inputDozer(); if (screen == S_DOZER) updateDozer(); break;
+            case S_DOZER_OVER: inputDozerOver(); updateDozer(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
@@ -540,7 +546,8 @@ int main(void) {
                  screen >= S_FIDGET_MENU && screen <= S_FIDGET_OVER ? MUS_FIDGET :
                  screen >= S_BOWL_MENU && screen <= S_BOWL_OVER ? MUS_BOWL :
                  screen >= S_STACK_MENU && screen <= S_STACK_OVER ? MUS_STACK :
-                 screen >= S_FLIP_MENU && screen <= S_FLIP_OVER ? MUS_FLIP : MUS_MAIN);
+                 screen >= S_FLIP_MENU && screen <= S_FLIP_OVER ? MUS_FLIP :
+                 screen >= S_DOZER_MENU && screen <= S_DOZER_OVER ? MUS_DOZER : MUS_MAIN);
         musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
@@ -580,6 +587,9 @@ int main(void) {
             case S_FLIP_LEVELS: drawFlipLevels(); break;
             case S_FLIP: case S_FLIP_PAUSE: drawFlip(); break;
             case S_FLIP_OVER: drawFlipOver(); break;
+            case S_DOZER_MENU: drawDozerMenu(); break;
+            case S_DOZER: case S_DOZER_PAUSE: drawDozer(); break;
+            case S_DOZER_OVER: drawDozerOver(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first

@@ -29,7 +29,8 @@ enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, 
        S_FIDGET_MENU, S_FIDGET, S_FIDGET_PAUSE, S_FIDGET_OVER, S_COINREC,
        S_BOWL_MENU, S_BOWL, S_BOWL_PAUSE, S_BOWL_OVER,
        S_STACK_MENU, S_STACK, S_STACK_PAUSE, S_STACK_OVER,
-       S_FLIP_MENU, S_FLIP_LEVELS, S_FLIP, S_FLIP_PAUSE, S_FLIP_OVER };
+       S_FLIP_MENU, S_FLIP_LEVELS, S_FLIP, S_FLIP_PAUSE, S_FLIP_OVER,
+       S_DOZER_MENU, S_DOZER, S_DOZER_PAUSE, S_DOZER_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -104,6 +105,8 @@ void gdark(int x, int gy);
 void drawIndexed(const u8 *idx, const u16 *pal);
 void themeUI(int t);             // every screen's look for theme t: backgrounds, buttons, accents, logo
 extern u16 logoT[LOGO_W * LOGO_H];
+extern u16 pmT[3][PM_BLUE_W * PM_BLUE_H > PM_RED_W * PM_RED_H ? PM_BLUE_W * PM_BLUE_H : PM_RED_W * PM_RED_H];
+void blitGlow(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 glow);
 extern u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
 extern int iconFat;
 extern u16 coinT[COIN_W * COIN_H], icCoinBigT[IC_COINBIG_W * IC_COINBIG_H], slotSymT[7][SLOT_LOGO_W * SLOT_LOGO_H];   // both screens from a 256-colour picture
@@ -131,7 +134,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void); void musicToggle(void);
-enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK, MUS_FLIP };
+enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK, MUS_FLIP, MUS_DOZER };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks
 void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
@@ -206,6 +209,11 @@ int  flipEnter(void); void flipThemeChanged(void);
 void drawFlipMenu(void); void inputFlipMenu(void); void drawFlipLevels(void); void inputFlipLevels(void);
 void drawFlip(void); void inputFlip(void); void updateFlip(void);
 void drawFlipOver(void); void inputFlipOver(void);
+// Dozer (dozer.c)
+int  dozerEnter(void); void dozerThemeChanged(void);
+void drawDozerMenu(void); void inputDozerMenu(void);
+void drawDozer(void); void inputDozer(void); void updateDozer(void);
+void drawDozerOver(void); void inputDozerOver(void);
 extern int gStip; extern u16 gSil; extern int gGlowShop;
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col);                // 1 = draw sprites see-through (every other pixel)
 

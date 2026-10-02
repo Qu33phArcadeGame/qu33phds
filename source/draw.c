@@ -192,6 +192,7 @@ void coinCount(u16 *buf, int x, int y) {
 // recoloured by the same themeTint the website-style filters are modelled on.
 u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18), uiIcon = COL(19, 19, 20);
 u16 logoT[LOGO_W * LOGO_H];
+u16 pmT[3][PM_BLUE_W * PM_BLUE_H > PM_RED_W * PM_RED_H ? PM_BLUE_W * PM_BLUE_H : PM_RED_W * PM_RED_H];
 u16 coinT[COIN_W * COIN_H], icCoinBigT[IC_COINBIG_W * IC_COINBIG_H], slotSymT[7][SLOT_LOGO_W * SLOT_LOGO_H];
 u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
 int iconFat;                                 // extra thickness for the icons' outline pass
@@ -269,6 +270,13 @@ void themeUI(int t) {
     // the logo and every menu icon take the theme's colour (CARTOON: grey) but stay bright enough to read
     #define TINT(dst, src, n) for (int i = 0; i < (n); i++) dst[i] = (src[i] & 0x8000) ? (t <= 1 ? themeTint(src[i], t) : mix(src[i], themeTint(src[i], t), 1, 2)) : 0;
     TINT(logoT, logo, LOGO_W * LOGO_H)
+    if (t == 4) for (int i = 0; i < LOGO_W * LOGO_H; i++) if (logo[i] & 0x8000) logoT[i] = bright(bright(themeTint(logo[i], 4)));   // NEON: lit-tube bright
+    // PlinQu33ph's markers in CARTOON: the real markers, half greyed so they match the comic look
+    // but still read as red, green and blue
+    { const u16 *S[3] = { pm_red, pm_green, pm_blue }; const int N[3] = { PM_RED_W * PM_RED_H, PM_GREEN_W * PM_GREEN_H, PM_BLUE_W * PM_BLUE_H };
+      for (int k = 0; k < 3; k++) for (int i = 0; i < N[k]; i++) { u16 c = S[k][i];
+          if (!(c & 0x8000) || t != 1) { pmT[k][i] = c; continue; }
+          int y = ((c & 31) * 3 + ((c >> 5) & 31) * 6 + ((c >> 10) & 31)) / 10; pmT[k][i] = mix(c, COL(y, y, y), 1, 2); } }
     TINT(icSlotT, ic_slot, IC_SLOT_W * IC_SLOT_H)
     TINT(icArcadeT, ic_arcade, IC_ARCADE_W * IC_ARCADE_H)
     for (int i = 0; i < IC_COIN_W * IC_COIN_H; i++)                // the coin keeps more of its gold so it still reads as a coin
@@ -508,4 +516,20 @@ void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float
     }
     gSil = 0; gStip = st;
     blitCore(spr, w, h, cx, cy, ang, scale);
+}
+
+// NEON glow round a picture: a soft wide halo (every other pixel) then a bright tight ring
+void blitGlow(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 glow) {
+    u16 dim = mix(glow, BLACK, 1, 2);
+    for (int r = 4; r >= 1; r--) for (int j = 0; j < h; j++) for (int i = 0; i < w; i++) {
+        if (!(spr[j * w + i] & 0x8000)) continue;
+        for (int k = 0; k < 8; k++) {
+            static const signed char O[8][2] = { {1,0},{-1,0},{0,1},{0,-1},{1,1},{-1,1},{1,-1},{-1,-1} };
+            int xx = x + i + O[k][0] * r, yy = y + j + O[k][1] * r;
+            if ((unsigned)xx >= SW || (unsigned)yy >= SH) continue;
+            if (r > 2) { if ((xx ^ yy) & 1) buf[yy * SW + xx] = dim; }
+            else buf[yy * SW + xx] = r == 2 ? dim : glow;
+        }
+    }
+    blit(buf, spr, w, h, x, y);
 }

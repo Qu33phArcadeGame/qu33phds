@@ -299,10 +299,10 @@ void drawPlinko(void) {
     // the real markers, drawn on the bottom screen (gy 192+ = bottom), spinning as they fall
     // CARTOON uses the cartoon markers (with their bold colour outline); every theme gets its finish
     int cart = sv.theme == 1;
-    const u16 *PS[3] = { cart ? pmc_red : pm_red, cart ? pmc_green : pm_green, cart ? pmc_blue : pm_blue };
-    const int PW[3] = { cart ? PMC_RED_W : PM_RED_W, cart ? PMC_GREEN_W : PM_GREEN_W, cart ? PMC_BLUE_W : PM_BLUE_W },
-              PH[3] = { cart ? PMC_RED_H : PM_RED_H, cart ? PMC_GREEN_H : PM_GREEN_H, cart ? PMC_BLUE_H : PM_BLUE_H };
-    float sc = 1.0f;                     // CARTOON: the cartoon markers at their own, readable size
+    (void)cart;                          // CARTOON: the real markers, half greyed (pmT is built by the theme)
+    const u16 *PS[3] = { pmT[0], pmT[1], pmT[2] };
+    const int PW[3] = { PM_RED_W, PM_GREEN_W, PM_BLUE_W }, PH[3] = { PM_RED_H, PM_GREEN_H, PM_BLUE_H };
+    float sc = 1.0f;
     gClipLo = SH; gClipHi = 2 * SH;
     for (int i = 0; i < 3; i++) if (balls[i].live || balls[i].done) drawMarkerFx(PS[i], PW[i], PH[i], (int)balls[i].x, SH + (int)balls[i].y, balls[i].rot, sc, i);
     if (dropIdx < 3) drawMarkerFx(PS[dropIdx], PW[dropIdx], PH[dropIdx], aimX, SH + 12, 1.5708f, sc, dropIdx);
