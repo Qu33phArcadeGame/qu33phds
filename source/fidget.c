@@ -115,7 +115,7 @@ void inputFidget(void) {
     }
     if (kDown & KEY_START) { screen = S_FIDGET_PAUSE; return; }
     if (!mode2p) {
-        if (kDown & KEY_X) { sv.musicOn = !sv.musicOn; if (sv.musicOn) musicStart(); else musicStop(); }
+        if (kDown & KEY_X) musicToggle();
         if (kDown & KEY_Y) sv.sfxOn = !sv.sfxOn;
     }
     if (state != ST_PLAY && state != ST_GOAL) return;

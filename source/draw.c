@@ -163,7 +163,15 @@ static void glyphs(u16 *buf, int gyMode, int x, int y, const char *t, u16 col, i
     }
 }
 void text(u16 *buf, int x, int y, const char *t, u16 col, int sc) { glyphs(buf, 0, x, y, t, col, sc); }
-void textC(u16 *buf, int y, const char *t, u16 col, int sc) { text(buf, (SW - textW(t, sc)) / 2, y, t, col, sc); }
+// centred text that always fits the screen: too wide at double size drops to normal size
+// (kept vertically centred where the big text would have been), then tightens its letters
+void textC(u16 *buf, int y, const char *t, u16 col, int sc) {
+    if (sc > 1 && textW(t, sc) > SW - 6) { y += (FONT_H * (sc - 1)) / 2; sc = 1; }
+    int old = squeeze;
+    while (textW(t, sc) > SW - 4 && squeeze < 3) squeeze++;
+    text(buf, (SW - textW(t, sc)) / 2, y, t, col, sc);
+    squeeze = old;
+}
 void gtext(int x, int gy, const char *t, u16 col, int sc) { glyphs(0, 1, x, gy, t, col, sc); }
 void scoreStr(char *o, int doubled) {
     if (doubled < 0 && (doubled & 1)) sprintf(o, "-%d.5", (-doubled) / 2);
@@ -183,6 +191,8 @@ void coinCount(u16 *buf, int x, int y) {
 // recoloured by the same themeTint the website-style filters are modelled on.
 u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18), uiIcon = COL(19, 19, 20);
 u16 logoT[LOGO_W * LOGO_H];
+u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
+int iconFat;                                 // extra thickness for the icons' outline pass
 static u16 uiEdge = COL(31, 31, 31), uiSel = COL(31, 26, 4), uiGradTop = COL(7, 7, 7), uiGradMid = COL(2, 2, 2), uiGradEnd = COL(0, 0, 0);
 static u16 BTN_GRAD[32];
 static u32 rs = 1;
@@ -250,8 +260,16 @@ void themeUI(int t) {
     }
     uiIcon = t == 1 ? COL(3, 3, 3) : t == 2 ? COL(18, 21, 27) : t == 4 ? COL(9, 31, 15) : (t == 3 || t == 5) ? COL(31, 24, 7) : COL(19, 19, 20);
     for (int i = 0; i < 32; i++) BTN_GRAD[i] = i < 15 ? mix(uiGradTop, uiGradMid, i, 15) : mix(uiGradMid, uiGradEnd, i - 15, 17);
-    // the logo takes the theme's colour but stays bright enough to read
-    for (int i = 0; i < LOGO_W * LOGO_H; i++) logoT[i] = (logo[i] & 0x8000) ? (t <= 1 ? themeTint(logo[i], t) : mix(logo[i], themeTint(logo[i], t), 1, 2)) : 0;
+    // the logo and every menu icon take the theme's colour (CARTOON: grey) but stay bright enough to read
+    #define TINT(dst, src, n) for (int i = 0; i < (n); i++) dst[i] = (src[i] & 0x8000) ? (t <= 1 ? themeTint(src[i], t) : mix(src[i], themeTint(src[i], t), 1, 2)) : 0;
+    TINT(logoT, logo, LOGO_W * LOGO_H)
+    TINT(icSlotT, ic_slot, IC_SLOT_W * IC_SLOT_H)
+    TINT(icArcadeT, ic_arcade, IC_ARCADE_W * IC_ARCADE_H)
+    for (int i = 0; i < IC_COIN_W * IC_COIN_H; i++)                // the coin keeps more of its gold so it still reads as a coin
+        icCoinT[i] = (ic_coin[i] & 0x8000) ? (t <= 1 ? themeTint(ic_coin[i], t) : mix(ic_coin[i], themeTint(ic_coin[i], t), 1, 3)) : 0;
+    #undef TINT
+    uiDotRed = t <= 0 ? COL(31, 10, 10) : themeTint(COL(31, 10, 10), t);
+    uiInk = t == 1 ? BLACK : t == 4 ? COL(0, 6, 2) : t == 2 ? COL(1, 2, 7) : (t == 3 || t == 5) ? COL(7, 4, 0) : COL(1, 1, 1);
     bgOK = 1;
 }
 
@@ -411,13 +429,13 @@ static void thickLine(u16 *buf, float x0, float y0, float x1, float y1, int r, u
 // The website's icons are 24x24 SVGs; here each unit is s/24 of the icon's size.
 void iconPlinko(u16 *buf, int x, int y, int s, u16 c) {
     static const signed char P[8][2] = { {6,6},{12,6},{18,6},{9,11},{15,11},{6,16},{12,16},{18,16} };
-    for (int i = 0; i < 8; i++) dot(buf, x + P[i][0] * s / 24, y + P[i][1] * s / 24, s / 16, c);
-    dot(buf, x + 12 * s / 24, y + 21 * s / 24, s / 10, COL(31, 10, 10));
+    for (int i = 0; i < 8; i++) dot(buf, x + P[i][0] * s / 24, y + P[i][1] * s / 24, s / 13 + iconFat, c);
+    dot(buf, x + 12 * s / 24, y + 21 * s / 24, s / 9 + iconFat, iconFat ? c : uiDotRed);
 }
 void iconGear(u16 *buf, int x, int y, int s, u16 c) {
-    float k = s / 24.0f; int r = s / 22 + 1;
-    for (int j = -3 * s / 24 - 1; j <= 3 * s / 24 + 1; j++) for (int i = -3 * s / 24 - 1; i <= 3 * s / 24 + 1; i++) {
-        int d = i * i + j * j, R = 3 * s / 24; if (d <= (R + 1) * (R + 1) && d >= (R - 1) * (R - 1)) dot(buf, x + 12 * s / 24 + i, y + 12 * s / 24 + j, 0, c); }
+    float k = s / 24.0f; int r = 1 + iconFat;
+    for (int j = -3 * s / 24 - 3; j <= 3 * s / 24 + 3; j++) for (int i = -3 * s / 24 - 3; i <= 3 * s / 24 + 3; i++) {
+        int d = i * i + j * j, R = 3 * s / 24; if (d <= (R + 1 + iconFat) * (R + 1 + iconFat) && d >= (R - 1 - iconFat) * (R - 1 - iconFat)) dot(buf, x + 12 * s / 24 + i, y + 12 * s / 24 + j, 0, c); }
     static const float L[8][4] = { {12,3,12,5},{12,19,12,21},{3,12,5,12},{19,12,21,12},{5.6f,5.6f,7,7},{17,17,18.4f,18.4f},{18.4f,5.6f,17,7},{7,17,5.6f,18.4f} };
     for (int i = 0; i < 8; i++) thickLine(buf, x + L[i][0] * k, y + L[i][1] * k, x + L[i][2] * k, y + L[i][3] * k, r, c);
 }
@@ -436,9 +454,9 @@ void iconPalette(u16 *buf, int x, int y, int s, u16 c) {     // the website's pa
         bez(P, &n, 22, 14, 22, 9, 17.5f, 5, 12, 5);   // (the website's path ends at 12,5 and closes to 12,3)
         P[n * 2] = 12; P[n * 2 + 1] = 3; n++;
     }
-    float k = s / 24.0f; int r = s / 26 + 1;
+    float k = s / 24.0f; int r = 1 + iconFat;
     for (int i = 1; i < n; i++) thickLine(buf, x + P[i * 2 - 2] * k, y + P[i * 2 - 1] * k, x + P[i * 2] * k, y + P[i * 2 + 1] * k, r, c);
-    dot(buf, x + 8 * s / 24, y + 10 * s / 24, s / 18 + 1, c); dot(buf, x + 12 * s / 24, y + (int)(7.5f * k), s / 18 + 1, c); dot(buf, x + 16 * s / 24, y + 10 * s / 24, s / 18 + 1, c);
+    dot(buf, x + 8 * s / 24, y + 10 * s / 24, s / 18 + 1 + iconFat, c); dot(buf, x + 12 * s / 24, y + (int)(7.5f * k), s / 18 + 1 + iconFat, c); dot(buf, x + 16 * s / 24, y + 10 * s / 24, s / 18 + 1 + iconFat, c);
 }
 
 // a sprite with a solid ink outline round it (so pictures pop on CARTOON's light paper)

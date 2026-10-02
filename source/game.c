@@ -56,7 +56,7 @@ static void confetti(float x, float y) {
 
 // ── sound ─────────────────────────────────────────────────────────────────
 // Everything is IMA-ADPCM now (4 bits a sample, played natively by the DS sound hardware).
-static int musicCh = -1;
+static int musicCh = -1, musicMuted;
 static void play(const u8 *d, int len, int vol) { playAdpcm(d, len, 16000, vol); }
 void sfxThrow(int o) {
     int r = rand();
@@ -87,11 +87,23 @@ void musicStart(void) {
     if (musicCh >= 0 || !sv.musicOn) return;
     const u8 *d; int len, rate;
     if (!trackData(musicTrack, &d, &len, &rate, &musicFrames)) return;
-    musicCh = soundPlaySample(d, SoundFormat_ADPCM, len, rate, 70, 64, false, 0); musicT = 0;
+    musicCh = soundPlaySample(d, SoundFormat_ADPCM, len, rate, 70, 64, false, 0); musicT = 0; musicMuted = 0;
+}
+// X in a game: mute/unmute without restarting the song (it keeps playing silently, so it
+// carries on from where it is rather than starting over)
+void musicToggle(void) {
+    sv.musicOn = !sv.musicOn;
+    if (musicCh >= 0) { soundSetVolume(musicCh, sv.musicOn ? 70 : 0); musicMuted = !sv.musicOn; }
+    else if (sv.musicOn) musicStart();
 }
 void musicStop(void) { if (musicCh >= 0) { soundKill(musicCh); musicCh = -1; } }
 void musicSet(int t) { if (t != musicTrack) { musicStop(); musicTrack = t; } musicStart(); }
-void musicTick(void) { if (musicCh >= 0 && ++musicT >= musicFrames) { musicStop(); musicStart(); } }
+void musicTick(void) {
+    if (musicCh >= 0 && ++musicT >= musicFrames) {      // loop; a muted song loops on silently
+        int m = musicMuted; musicStop(); sv.musicOn = 1; musicStart(); sv.musicOn = !m;
+        if (m && musicCh >= 0) { soundSetVolume(musicCh, 0); musicMuted = 1; }
+    }
+}
 void playAdpcm(const u8 *d, int len, int rate, int vol) {
     if (!sv.sfxOn) return;
     if (vol > 127) vol = 127;

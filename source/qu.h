@@ -99,7 +99,9 @@ void blitRotScale(const u16 *spr, int w, int h, int cx, int cy, float ang, float
 void gdark(int x, int gy);
 void drawIndexed(const u8 *idx, const u16 *pal);
 void themeUI(int t);             // every screen's look for theme t: backgrounds, buttons, accents, logo
-extern u16 logoT[LOGO_W * LOGO_H];   // both screens from a 256-colour picture
+extern u16 logoT[LOGO_W * LOGO_H];
+extern u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
+extern int iconFat;   // both screens from a 256-colour picture
 void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad);
 int textSW(const char *t); void textS(u16 *buf, int x, int y, const char *t, u16 col);
 void iconPlinko(u16 *buf, int x, int y, int s, u16 c); void iconGear(u16 *buf, int x, int y, int s, u16 c); void iconPalette(u16 *buf, int x, int y, int s, u16 c);
@@ -123,7 +125,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
-void musicStart(void); void musicStop(void);
+void musicStart(void); void musicStop(void); void musicToggle(void);
 enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks

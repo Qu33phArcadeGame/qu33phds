@@ -17,8 +17,9 @@
 #define GY(fy) ((int)((fy) * BPH) - BALL_OFF)
 #define ASPECT 1.78f                         // the website's PH/100: makes circles round on the tall field
 #define TOTAL 9
-#define LAND_HOLD 20
-#define FEED_DUR 16
+#define LAND_HOLD 13                         // (the website's 20, 46 and 16 frames, quickened a third for the DS)
+#define FEED_DUR 11
+#define HOP_T 19                              // one chair hop (the website's 26)
 #define QSLOTS 8
 #define QX0 0.325f
 #define QSPAN 0.35f
@@ -72,11 +73,11 @@ typedef struct {
     baseY, powY, jitX, jitY, overFrom, overK; int scat; const Shape *sh; int nsh; int coinDiv;
 } Machine;
 static const Machine MACH[3] = {
-    { "CLASSIC", 0.490f, 0.775f, 0.735f, 46, 0.55f, { 0.364f, 0.511f, 0.655f }, { 0.197f, 0.196f, 0.196f }, 0.218f, 0.46f, 0.28f,
+    { "CLASSIC", 0.490f, 0.775f, 0.735f, 32, 0.55f, { 0.364f, 0.511f, 0.655f }, { 0.197f, 0.196f, 0.196f }, 0.218f, 0.46f, 0.28f,
       0.523f, 0.175f, 0.95f, 0.505f, 0.265f, 0.059f, 0.062f, 2.0f, 0.0f, 0, SHAPES_CLASSIC, sizeof SHAPES_CLASSIC / sizeof(Shape), 50 },
-    { "ADVANCED", 0.490f, 0.820f, 0.790f, 48, 0.58f, { 0.319f, 0.455f, 0.585f }, { 0.231f, 0.231f, 0.230f }, 0.232f, 0.46f, 0.28f,
+    { "ADVANCED", 0.490f, 0.820f, 0.790f, 34, 0.58f, { 0.319f, 0.455f, 0.585f }, { 0.231f, 0.231f, 0.230f }, 0.232f, 0.46f, 0.28f,
       0.443f, 0.256f, 1.15f, 0.560f, 0.320f, 0.043f, 0.048f, 0.84f, 7.0f, 1, SHAPES_ADVANCED, sizeof SHAPES_ADVANCED / sizeof(Shape), 100 },
-    { "CHAIR TOWER", 0.500f, 0.820f, 0.790f, 48, 0.58f, { 0.408f, 0.513f, 0.617f }, { 0.281f, 0.279f, 0.281f }, 0.340f, 0.46f, 0.28f,
+    { "CHAIR TOWER", 0.500f, 0.820f, 0.790f, 34, 0.58f, { 0.408f, 0.513f, 0.617f }, { 0.281f, 0.279f, 0.281f }, 0.340f, 0.46f, 0.28f,
       0.500f, 0.285f, 1.08f, 0.765f, 0.589f, 0.040f, 0.045f, 0.92f, 5.0f, 2, SHAPES_TOWER, sizeof SHAPES_TOWER / sizeof(Shape), 1000 } };
 static float scatOf(int k, float p) {                  // the website's scatter curve per machine
     float u = p - (k == 0 ? 0.70f : k == 1 ? 0.74f : 0.73f); if (u < 0) u = -u;
@@ -241,7 +242,7 @@ void updateBall(void) {
             if (hasChair) {
                 const Stop *e = left ? &hopQ[hopN - 1] : &lastChair;
                 if (left) sprintf(t, "+%d", pts); else if (pts > 0) strcpy(t, lastChair.label); else strcpy(t, "MISS");
-                popAdd(e->x, e->y, 26 * hops, t, 80, pts);
+                popAdd(e->x, e->y, HOP_T * hops, t, 80, pts);
                 hop.x0 = ball.x1; hop.y0 = ball.y1; hop.x1 = lastChair.x; hop.y1 = lastChair.y; hop.t = 0; hop.on = 1;
             } else {
                 if (pts > 0) sprintf(t, "+%d", pts); else strcpy(t, "MISS");
@@ -253,7 +254,7 @@ void updateBall(void) {
         landT++;
         if (hop.on) {
             ball.spin += 0.55f;
-            if (++hop.t >= 26) {
+            if (++hop.t >= HOP_T) {
                 ball.x1 = hop.x1; ball.y1 = hop.y1; sfxPlop();
                 if (hopAt < hopN) { Stop *n = &hopQ[hopAt++]; hop.x0 = ball.x1; hop.y0 = ball.y1; hop.x1 = n->x; hop.y1 = n->y; hop.t = 0; }
                 else { hop.on = 0; landT = 0; score += pendingScore; pendingScore = 0; }
@@ -279,7 +280,7 @@ void inputBall(void) {
         return;
     }
     if (kDown & KEY_START) { screen = S_BALL_PAUSE; dragging = charging = 0; return; }
-    if (kDown & KEY_X) { sv.musicOn = !sv.musicOn; if (sv.musicOn) musicStart(); else musicStop(); }
+    if (kDown & KEY_X) musicToggle();
     if (kDown & KEY_Y) sv.sfxOn = !sv.sfxOn;
     if ((kDown & (KEY_L | KEY_R)) && state == ST_READY && resolved == 0) {     // change machine before the first roll
         startBall((mach + ((kDown & KEY_R) ? 1 : 2)) % 3); return;
@@ -351,7 +352,7 @@ void drawBall(void) {
         float cx = ball.x0 + (ball.x1 - ball.x0) * t, cy = ball.y0 + (ball.y1 - ball.y0) * t, sc = 1 - t * f->shrink, al = 1;
         int lift = 0;
         if (hop.on) {
-            float k = hop.t / 26.0f, e = k * k * (3 - 2 * k), sn = fsin(k * 3.14159265f);
+            float k = hop.t / (float)HOP_T, e = k * k * (3 - 2 * k), sn = fsin(k * 3.14159265f);
             cx = hop.x0 + (hop.x1 - hop.x0) * e; cy = hop.y0 + (hop.y1 - hop.y0) * e;
             lift = (int)(sn * BPH * 0.10f); sc = (1 - f->shrink) * (1.15f + sn * 0.55f);
         } else if (state == ST_LANDED) {                 // sinks into the hole and fades

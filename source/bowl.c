@@ -39,7 +39,7 @@
 #define CHAIR_R 0.135f
 #define MEGA_CHANCE 0.42f
 #define BASE_HOOK -0.085f
-#define DT (1.0f / 60.0f)
+#define DT (1.3f / 60.0f)                  // the website's real time, played 30% quicker on the DS
 static const float KK = NEAR_HW / FAR_HW - 1, S1 = FAR_HW / NEAR_HW;
 
 typedef struct { float X, Y, vx, vy, rot, vrot, sink; int col, down, gone; } Pin;
@@ -267,7 +267,7 @@ void inputBowl(void) {
         return;
     }
     if (kDown & KEY_START) { screen = S_BOWL_PAUSE; dragging = charging = 0; return; }
-    if (kDown & KEY_X) { sv.musicOn = !sv.musicOn; if (sv.musicOn) musicStart(); else musicStop(); }
+    if (kDown & KEY_X) musicToggle();
     if (kDown & KEY_Y) sv.sfxOn = !sv.sfxOn;
     if (phase != PH_AIM) { dragging = charging = 0; return; }
     if (kDown & KEY_L) orientIdx = (orientIdx + 2) % 3;

@@ -70,6 +70,9 @@ extern const u16 ic_slot[1280];
 extern const u16 ic_arcade[880];
 #define IC_ARCADE_W 22
 #define IC_ARCADE_H 40
+extern const u16 ic_coin[900];
+#define IC_COIN_W 30
+#define IC_COIN_H 30
 extern const u16 fonts_rows[950];
 #define FONTS_H 10
 extern const unsigned char fonts_w[95];

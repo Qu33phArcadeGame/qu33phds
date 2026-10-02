@@ -83,19 +83,22 @@ static void drawIconBtn(int i, int on) {
     iy += pressed;
     if (on) { rect(bufBot, b->x + 3, b->y + 1, b->w - 6, 2, c); rect(bufBot, b->x + 3, b->y + b->h - 3, b->w - 6, 2, c);
               rect(bufBot, b->x + 1, b->y + 3, 2, b->h - 6, c); rect(bufBot, b->x + b->w - 3, b->y + 3, 2, b->h - 6, c); }
-    if (i == 9) { if (cart) blitInk(bufBot, ic_slot, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy, BLACK); else blit(bufBot, ic_slot, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy); }
-    else if (i == 11) { if (cart) blitInk(bufBot, ic_arcade, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy, BLACK); else blit(bufBot, ic_arcade, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy); }
-    else if (i == 10) iconPlinko(bufBot, ix - s / 2, iy + 1, s, c);
+    // every icon wears the theme (CARTOON grey like the logo) and the same ink outline
+    if (i == 9) blitInk(bufBot, icSlotT, IC_SLOT_W, IC_SLOT_H, ix - IC_SLOT_W / 2, iy, uiInk);
+    else if (i == 11) blitInk(bufBot, icArcadeT, IC_ARCADE_W, IC_ARCADE_H, ix - IC_ARCADE_W / 2, iy, uiInk);
     else if (i == 12) {                                  // the coin and your balance
         char v[12]; sprintf(v, "%d", sv.coins);
-        gClipLo = 0; gClipHi = 2 * SH;
-        blitRotScale(coin, COIN_W, COIN_H, ix, iy + 16 + SH, 0, 1.6f);   // (g-space: bottom screen starts at SH)
-        text(bufBot, ix - textW(v, 1) / 2, b->y + b->h - 17 + pressed, v, on ? YELLOW : GOLD, 1);
+        blitInk(bufBot, icCoinT, IC_COIN_W, IC_COIN_H, ix - IC_COIN_W / 2, iy + 2, uiInk);
+        text(bufBot, ix - textW(v, 1) / 2, b->y + b->h - 19 + pressed, v, on ? YELLOW : GOLD, 1);
         return;
+    } else {                                             // the drawn icons: an ink pass, then the colour
+        void (*f)(u16 *, int, int, int, u16) = i == 10 ? iconPlinko : i == 7 ? iconGear : iconPalette;
+        iconFat = 1; f(bufBot, ix - s / 2, iy + 1, s, uiInk); iconFat = 0;
+        f(bufBot, ix - s / 2, iy + 1, s, c);
     }
-    else if (i == 7) iconGear(bufBot, ix - s / 2, iy + 1, s, c);
-    else iconPalette(bufBot, ix - s / 2, iy + 1, s, c);
-    textS(bufBot, ix - textSW(b->label) / 2, b->y + b->h - 13 + pressed, b->label, on ? c : (i == 11 ? (cart ? COL(24, 10, 0) : GOLD) : uiIcon));
+    { int lx = ix - textSW(b->label) / 2, ly = b->y + b->h - 13 + pressed;   // caption, with a 1px ink shadow so it reads on any theme
+      textS(bufBot, lx + 1, ly + 1, b->label, uiInk);
+      textS(bufBot, lx, ly, b->label, on ? c : (i == 11 ? (cart ? COL(24, 10, 0) : GOLD) : uiIcon)); }
 }
 static void drawTitle(void) {
     fillScreen(bufTop, DARK);
@@ -312,7 +315,7 @@ static void inputSettings(void) {
     int h = btnInput(B, 10, &sel, 2);
     if (h < 0) return;
     switch (h) {
-        case 0: sv.musicOn = !sv.musicOn; if (sv.musicOn) musicStart(); else musicStop(); break;
+        case 0: musicToggle(); break;
         case 1: sv.sfxOn = !sv.sfxOn; break;
         case 2: sv.timer1p = sv.timer1p == 30 ? 45 : sv.timer1p == 45 ? 60 : 30; break;
         case 3: sv.timer2p = sv.timer2p == 15 ? 30 : sv.timer2p == 30 ? 60 : 15; break;
@@ -487,7 +490,7 @@ int main(void) {
             case S_TITLE: inputTitle(); break;
             case S_PLAY:
                 if (kDown & KEY_START) { screen = S_PAUSE; break; }
-                if (kDown & KEY_X) { sv.musicOn = !sv.musicOn; if (sv.musicOn) musicStart(); else musicStop(); }
+                if (kDown & KEY_X) musicToggle();
                 if (kDown & KEY_Y) sv.sfxOn = !sv.sfxOn;
                 matchInput(kDown, kHeld, kUp, tX, tY); matchUpdate();
                 if (matchOver) matchFinished();

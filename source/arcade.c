@@ -333,7 +333,7 @@ void inputMini(void) {
         return;
     }
     if (kDown & KEY_START) { screen = S_MINI_PAUSE; dragging = 0; charging = 0; return; }
-    if (kDown & KEY_X) { sv.musicOn = !sv.musicOn; if (sv.musicOn) musicStart(); else musicStop(); }
+    if (kDown & KEY_X) musicToggle();
     if (kDown & KEY_Y) sv.sfxOn = !sv.sfxOn;
     // flick: the marker follows your finger along the near edge, then goes where you flick it
     if ((kDown & KEY_TOUCH) && canThrow()) { dragging = 1; dsx = dnx = tX; dsy = dny = tY; aimU = uAtEdge(tX); charging = 0; }
