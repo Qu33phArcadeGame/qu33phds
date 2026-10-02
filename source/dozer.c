@@ -97,21 +97,23 @@ static void closest(Item *a, Item *b, int *ax, int *ay, int *bx, int *by) {
 static int uExt(Item *a) { return a->h ? (a->ex < 0 ? -a->ex : a->ex) + a->rad : a->rad; }
 static int backV(Item *a) { int y1 = a->v - a->ey, y2 = a->v + a->ey; return (y1 < y2 ? y1 : y2) - a->rad; }
 static void separate(void) {
-    const int REACH = F(0.25);
     for (int i = 0; i < nI; i++) {
         Item *a = &it[i];
         for (int j = i + 1; j < nI; j++) {
             Item *b = &it[j];
             if (a->shelf != b->shelf) continue;
             int du = b->u - a->u, dv = b->v - a->v;
-            if (du > REACH || du < -REACH || dv > REACH || dv < -REACH) continue;     // far apart: no maths
+            // only pieces that could actually touch: their radii plus the markers' half-lengths
+            int reach = a->rad + b->rad + (a->ex < 0 ? -a->ex : a->ex) + (a->ey < 0 ? -a->ey : a->ey) + (b->ex < 0 ? -b->ex : b->ex) + (b->ey < 0 ? -b->ey : b->ey);
+            if (du > reach || du < -reach || dv > reach || dv < -reach) continue;
             int ax, ay, bx, by; closest(a, b, &ax, &ay, &bx, &by);
             int dx = bx - ax, dy = by - ay, mn = a->rad + b->rad;
             s64 d2 = (s64)dx * dx + (s64)dy * dy;
             if (d2 >= (s64)mn * mn || d2 == 0) continue;
             int d = isqrt64(d2);
             if (mn - d < F(0.006)) continue;                                      // settled contact: no jitter
-            int push = (mn - d) / 2, nx = fdiv(dx, d), ny = fdiv(dy, d);
+            int inv = (1 << 30) / d, push = (mn - d) / 2;                       // one quick divide, then multiplies
+            int nx = (int)(((s64)dx * inv) >> 14), ny = (int)(((s64)dy * inv) >> 14);
             a->u -= fmul(nx, push); a->v -= fmul(ny, push); b->u += fmul(nx, push); b->v += fmul(ny, push);
             int rel = fmul(b->du - a->du, nx) + fmul(b->dv - a->dv, ny);
             if (rel < 0) { int imp = fmul(-rel, F(0.48)); a->du -= fmul(nx, imp); a->dv -= fmul(ny, imp); b->du += fmul(nx, imp); b->dv += fmul(ny, imp); }
@@ -174,12 +176,18 @@ static void endGame(void) {
     sv.arcadePlays[ARC_DOZER]++; saveWrite();
     screen = S_DOZER_OVER;
 }
-static void bedXY(int u, int v, float *x, float *y, float *s) {
-    float fu = u / (float)FX, fv = v / (float)FX;
-    float l = BED_BACKL + (BED_FRONTL - BED_BACKL) * fv, r = BED_BACKR + (BED_FRONTR - BED_BACKR) * fv;
-    *x = 256 * (l + (r - l) * fu); *y = 384 * (BED_BACKY + (BED_FRONTY - BED_BACKY) * fv);
-    float wB = BED_BACKR - BED_BACKL; *s = (wB + ((BED_FRONTR - BED_FRONTL) - wB) * fv) / wB;
+// the bed's perspective, in whole numbers: u,v (16.16) -> screen x,y and the size factor (16.16)
+#define BXL ((int)(256 * BED_BACKL * FX))
+#define BXR ((int)(256 * BED_BACKR * FX))
+#define FXL ((int)(256 * BED_FRONTL * FX))
+#define FXR ((int)(256 * BED_FRONTR * FX))
+static void bedXYi(int u, int v, int *x, int *y, int *s) {
+    int l = BXL + fmul(FXL - BXL, v), r = BXR + fmul(FXR - BXR, v);
+    *x = (l + fmul(r - l, u)) >> 16;
+    *y = (int)(384 * BED_BACKY) + (fmul((int)(384 * (BED_FRONTY - BED_BACKY) * FX), v) >> 16);
+    *s = FX + fmul((int)(((BED_FRONTR - BED_FRONTL) / (BED_BACKR - BED_BACKL) - 1) * FX), v);
 }
+static void bedXY(int u, int v, float *x, float *y, float *s) { int ix, iy, is; bedXYi(u, v, &ix, &iy, &is); *x = ix; *y = iy; *s = is / (float)FX; }
 void updateDozer(void) {
     const float dt = 1.0f / 60;
     for (int i = 0; i < 6; i++) if (pops[i].life > 0) pops[i].life--;
@@ -193,7 +201,7 @@ void updateDozer(void) {
     if (chairOn && chairT < 1) { chairT += dt * 2.2f; if (chairT > 1) chairT = 1; }
     if (tLeft <= 0) { tLeft = 0; endGame(); return; }
     if (refillFr <= 0) { int nc = 0; for (int i = 0; i < nI; i++) nc += it[i].coin; if (nc < 5) doRefill(); }
-    pzPhase += dt * 1.55f; pzPrev = pz;
+    pzPhase += dt * 2.0f; pzPrev = pz;                               // (the website's 1.55, quickened for the DS)
     pz = PZ_MIN + (int)((PZ_MAX - PZ_MIN) * (0.5f - 0.5f * fcos(pzPhase)));
     int pSpeed = pz - pzPrev > 0 ? pz - pzPrev : 0, dpz = pz - pzPrev;
     if (dropping) {
@@ -266,11 +274,21 @@ static void drawMk(float x, float y, float len, float rot, int col) {
     // the website lays the square marker pictures across len x len, the blue one across len
     drawMarkerFx(s, w, h, (int)x, (int)y, rot - 0.785f * (col != 2), len / w, col);
 }
-static void coinAt(int x, int gy, int rad) {                         // a quick scaled coin (no rotation)
-    int d = rad * 2; if (d < 3) d = 3;
+// coins come in a handful of sizes: each size is scaled once (and again when the theme changes)
+// and then copied straight into the screen rows, with no maths per pixel
+#define CMAXD 22
+static u16 coinCache[CMAXD + 1][CMAXD * CMAXD]; static u8 coinReady[CMAXD + 1]; static int coinTheme = -1;
+static u16 *gRow(int gy) { return gy < SH ? &bufTop[gy * SW] : &bufBot[(gy - SH) * SW]; }
+static void coinAt(int x, int gy, int rad) {
+    int d = rad * 2; if (d < 3) d = 3; if (d > CMAXD) d = CMAXD;
     int dh = d * 82 / 100;
-    for (int j = 0; j < dh; j++) { int sy = j * COIN_H / dh; int yy = gy - dh / 2 + j;
-        for (int i = 0; i < d; i++) { u16 p = coinT[sy * COIN_W + i * COIN_W / d]; if (p & 0x8000) gpx(x - d / 2 + i, yy, p); } }
+    if (coinTheme != sv.theme) { memset(coinReady, 0, sizeof coinReady); coinTheme = sv.theme; }
+    u16 *c = coinCache[d];
+    if (!coinReady[d]) { for (int j = 0; j < dh; j++) for (int i = 0; i < d; i++) c[j * d + i] = coinT[(j * COIN_H / dh) * COIN_W + i * COIN_W / d]; coinReady[d] = 1; }
+    int x0 = x - d / 2, y0 = gy - dh / 2;
+    for (int j = 0; j < dh; j++) { int yy = y0 + j; if (yy < 0 || yy >= 2 * SH) continue;
+        u16 *row = gRow(yy); const u16 *src = &c[j * d];
+        for (int i = 0; i < d; i++) { int xx = x0 + i; u16 p = src[i]; if ((p & 0x8000) && (unsigned)xx < SW) row[xx] = p; } }
 }
 static void drawPusher(void) {
     float yTop = 384 * 0.405f, s, xl, xr, yF;
@@ -280,7 +298,9 @@ static void drawPusher(void) {
     for (int y = (int)yTop; y < (int)yF; y++) {
         float t = (y - yTop) / (yF - yTop); int x0 = (int)(lT + (lF - lT) * t), x1 = (int)(rT + (rF - rT) * t);
         u16 c = COL(3 + (int)(t * 3), 3 + (int)(t * 3), 3 + (int)(t * 4));
-        for (int x = x0; x < x1; x++) gpx(x, y, c);
+        if (x0 < 0) x0 = 0;
+        if (x1 > SW) x1 = SW;
+        u16 *row = gRow(y); for (int x = x0; x < x1; x++) row[x] = c;
     }
     int fh = (int)(384 * 0.022f * s), y0 = (int)yF - fh / 2;           // the yellow-and-black hazard face
     for (int j = 0; j < fh; j++) for (int x = (int)lF; x < (int)rF; x++) gpx(x, y0 + j, ((x + j) / (fh > 2 ? fh : 3)) & 1 ? COL(2, 2, 2) : COL(30, 24, 0));
@@ -296,12 +316,13 @@ void drawDozer(void) {
     // the pile, back to front
     static u8 ord[MAXI]; for (int i = 0; i < nI; i++) ord[i] = i;
     for (int i = 1; i < nI; i++) { u8 k = ord[i]; int j = i - 1; while (j >= 0 && it[ord[j]].v > it[k].v) { ord[j + 1] = ord[j]; j--; } ord[j + 1] = k; }
-    for (int n = 0; n < nI; n++) { Item *a = &it[ord[n]]; float x, y, sc; bedXY(a->u, a->v, &x, &y, &sc);
-        float lift = ((a->shelf ? FX : a->drop) / (float)FX) * 384 * 0.020f * sc; y -= lift;
-        if (a->coin) { int rad = (int)((R_COIN / (float)FX) * 76.8f * sc * 0.95f + 0.5f);
-            for (int i = -rad; i <= rad; i++) gdark((int)x + i, (int)(y + rad * 0.45f));
-            coinAt((int)x, (int)y, rad); }
-        else drawMk(x, y, ((MK_H + MK_RAD) * 2 / (float)FX) * 76.8f * sc, a->rot, a->col);
+    for (int n = 0; n < nI; n++) { Item *a = &it[ord[n]]; int x, y, sc; bedXYi(a->u, a->v, &x, &y, &sc);
+        y -= fmul(fmul(a->shelf ? FX : a->drop, sc), F(384 * 0.020));
+        if (a->coin) { int rad = (fmul(sc, F(0.050 * 76.8 * 0.95)) + FX / 2) >> 16;
+            u16 *row = (y + rad / 2 >= 0 && y + rad / 2 < 2 * SH) ? gRow(y + rad / 2) : 0;
+            if (row) for (int i = -rad; i <= rad; i++) { int xx = x + i; if ((unsigned)xx < SW) row[xx] = ((row[xx] >> 1) & 0x3DEF) | 0x8000; }
+            coinAt(x, y, rad); }
+        else drawMk(x, y, ((MK_H + MK_RAD) * 2 / (float)FX) * 76.8f * (sc / (float)FX), a->rot, a->col);
     }
     for (int i = 0; i < nFall; i++) {
         if (fall[i].coin) coinAt((int)fall[i].x, (int)fall[i].y, (int)((R_COIN / (float)FX) * 76.8f * fall[i].sz));

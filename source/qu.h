@@ -30,7 +30,9 @@ enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, 
        S_BOWL_MENU, S_BOWL, S_BOWL_PAUSE, S_BOWL_OVER,
        S_STACK_MENU, S_STACK, S_STACK_PAUSE, S_STACK_OVER,
        S_FLIP_MENU, S_FLIP_LEVELS, S_FLIP, S_FLIP_PAUSE, S_FLIP_OVER,
-       S_DOZER_MENU, S_DOZER, S_DOZER_PAUSE, S_DOZER_OVER };
+       S_DOZER_MENU, S_DOZER, S_DOZER_PAUSE, S_DOZER_OVER,
+       S_PIN_MENU, S_PIN, S_PIN_PAUSE, S_PIN_OVER,
+       S_JUMP_MENU, S_JUMP, S_JUMP_PAUSE, S_JUMP_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -134,7 +136,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void); void musicToggle(void);
-enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK, MUS_FLIP, MUS_DOZER };
+enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK, MUS_FLIP, MUS_DOZER, MUS_PIN };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks
 void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
@@ -214,6 +216,16 @@ int  dozerEnter(void); void dozerThemeChanged(void);
 void drawDozerMenu(void); void inputDozerMenu(void);
 void drawDozer(void); void inputDozer(void); void updateDozer(void);
 void drawDozerOver(void); void inputDozerOver(void);
+// Pinball (pin.c)
+int  pinEnter(void); void pinThemeChanged(void);
+void drawPinMenu(void); void inputPinMenu(void);
+void drawPin(void); void inputPin(void); void updatePin(void);
+void drawPinOver(void); void inputPinOver(void);
+// Jump (jump.c)
+int  jumpEnter(void); void jumpThemeChanged(void);
+void drawJumpMenu(void); void inputJumpMenu(void);
+void drawJump(void); void inputJump(void); void updateJump(void);
+void drawJumpOver(void); void inputJumpOver(void);
 extern int gStip; extern u16 gSil; extern int gGlowShop;
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col);                // 1 = draw sprites see-through (every other pixel)
 

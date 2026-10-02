@@ -19,7 +19,7 @@
 #define MW 29.0f                                   // WW*0.115
 #define PLATE_W 102.0f                             // WW*0.40
 #define PLATE_Y 346.0f                             // CH*0.90
-#define GRAV 640.0f                                // px/s^2: about twice the website's pull, so the DS plays snappier
+#define GRAV 820.0f                                // px/s^2: about twice the website's pull, so the DS plays snappier
 #define LOOSE 4                                    // how many of the top placed markers stay loose
 #define MAXB 160
 
@@ -148,7 +148,7 @@ static void step(float dt) {
             float s = c->sep + 0.5f; c->bias = s < 0 ? -0.2f * inv * s : 0;
             applyP(b1, b2, c->r1, c->r2, vadd(vmul(c->n, c->Pn), vmul(t, c->Pt)));
         } }
-    for (int it = 0; it < 10; it++)
+    for (int it = 0; it < 7; it++)                                    // 7 solver passes keep stacks steady and the DS quick
         for (int k = 0; k < nArb; k++) { Arb *ar = &arbs[k]; Body *b1 = &B[ar->a], *b2 = &B[ar->b];
             for (int i = 0; i < ar->n; i++) { Contact *c = &ar->c[i];
                 V2 dv = vsub(vadd(b2->v, crossSV(b2->w, c->r2)), vadd(b1->v, crossSV(b1->w, c->r1)));
@@ -231,7 +231,7 @@ static float clampX(float x) { float h = (horizontal ? ML : MW) * 0.5f; return x
 void updateStack(void) {
     if (state == ST_PLAY && cur >= 0 && B[cur].held && haveTarget) {        // the held marker follows your finger
         Body *b = &B[cur];
-        b->p.x += (target.x - b->p.x) * 0.35f; b->p.y += (target.y - b->p.y) * 0.35f;   // follows your finger quickly
+        b->p.x += (target.x - b->p.x) * 0.45f; b->p.y += (target.y - b->p.y) * 0.45f;   // follows your finger quickly
         b->a = baseAngle(); b->v = v2(0, 0); b->w = 0;
     }
     physGrav = state == ST_OVER ? GRAV * 2.5f : GRAV;
@@ -243,7 +243,7 @@ void updateStack(void) {
         else {
             float sp = fsqrt(b->v.x * b->v.x + b->v.y * b->v.y) / 21.6f + fabs_(b->w) * 0.5f;
             if (sp < 0.4f) b->settle++; else b->settle = 0;
-            if (b->settle > 7) {                                   // settled: next marker straight away
+            if (b->settle > 4) {                                   // settled: next marker straight away
                 placed[nPlaced++] = cur; score = nPlaced; sfxPlop();
                 if (nPlaced > LOOSE) setMass(&B[placed[nPlaced - LOOSE - 1]], 1);   // buried: lock it in place
                 cur = -1; spawn();

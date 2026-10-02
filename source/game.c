@@ -7,6 +7,7 @@
 #include "assets_stack.h"
 #include "assets_flip.h"
 #include "assets_dozer.h"
+#include "assets_pin.h"
 
 // ── the website's world (420 x 900) and the realistic field's layout ──────
 #define WORLD_H      900.0f
@@ -85,6 +86,7 @@ static int trackData(int t, const u8 **d, int *len, int *rate, int *frames) {
     if (t == MUS_STACK && pakIs(STACK_PAK)) { *d = st_music; *len = ST_MUSIC_LEN; *rate = ST_MUSIC_RATE; *frames = ST_MUSIC_FRAMES; return 1; }
     if (t == MUS_FLIP && pakIs(FLIP_PAK)) { *d = fl_music; *len = FL_MUSIC_LEN; *rate = FL_MUSIC_RATE; *frames = FL_MUSIC_FRAMES; return 1; }
     if (t == MUS_DOZER && pakIs(DOZER_PAK)) { *d = dz_music; *len = DZ_MUSIC_LEN; *rate = DZ_MUSIC_RATE; *frames = DZ_MUSIC_FRAMES; return 1; }
+    if (t == MUS_PIN && pakIs(PIN_PAK)) { *d = pb_music; *len = PB_MUSIC_LEN; *rate = PB_MUSIC_RATE; *frames = PB_MUSIC_FRAMES; return 1; }
     if (t == MUS_MAIN) { *d = snd_music; *len = SND_MUSIC_LEN; *rate = SND_MUSIC_RATE; *frames = SND_MUSIC_FRAMES; return 1; }
     return 0;
 }

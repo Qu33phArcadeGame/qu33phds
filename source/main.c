@@ -539,6 +539,12 @@ int main(void) {
             case S_DOZER_MENU: inputDozerMenu(); break;
             case S_DOZER: case S_DOZER_PAUSE: inputDozer(); if (screen == S_DOZER) updateDozer(); break;
             case S_DOZER_OVER: inputDozerOver(); updateDozer(); break;
+            case S_PIN_MENU: inputPinMenu(); break;
+            case S_PIN: case S_PIN_PAUSE: inputPin(); if (screen == S_PIN) updatePin(); break;
+            case S_PIN_OVER: inputPinOver(); break;
+            case S_JUMP_MENU: inputJumpMenu(); break;
+            case S_JUMP: case S_JUMP_PAUSE: inputJump(); if (screen == S_JUMP) updateJump(); break;
+            case S_JUMP_OVER: inputJumpOver(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
@@ -547,7 +553,8 @@ int main(void) {
                  screen >= S_BOWL_MENU && screen <= S_BOWL_OVER ? MUS_BOWL :
                  screen >= S_STACK_MENU && screen <= S_STACK_OVER ? MUS_STACK :
                  screen >= S_FLIP_MENU && screen <= S_FLIP_OVER ? MUS_FLIP :
-                 screen >= S_DOZER_MENU && screen <= S_DOZER_OVER ? MUS_DOZER : MUS_MAIN);
+                 screen >= S_DOZER_MENU && screen <= S_DOZER_OVER ? MUS_DOZER :
+                 screen >= S_PIN_MENU && screen <= S_PIN_OVER ? MUS_PIN : MUS_MAIN);
         musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
@@ -590,6 +597,12 @@ int main(void) {
             case S_DOZER_MENU: drawDozerMenu(); break;
             case S_DOZER: case S_DOZER_PAUSE: drawDozer(); break;
             case S_DOZER_OVER: drawDozerOver(); break;
+            case S_PIN_MENU: drawPinMenu(); break;
+            case S_PIN: case S_PIN_PAUSE: drawPin(); break;
+            case S_PIN_OVER: drawPinOver(); break;
+            case S_JUMP_MENU: drawJumpMenu(); break;
+            case S_JUMP: case S_JUMP_PAUSE: drawJump(); break;
+            case S_JUMP_OVER: drawJumpOver(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first
