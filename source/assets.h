@@ -73,6 +73,9 @@ extern const u16 ic_arcade[880];
 extern const u16 ic_coin[900];
 #define IC_COIN_W 30
 #define IC_COIN_H 30
+extern const u16 ic_coinbig[5184];
+#define IC_COINBIG_W 72
+#define IC_COINBIG_H 72
 extern const u16 fonts_rows[950];
 #define FONTS_H 10
 extern const unsigned char fonts_w[95];

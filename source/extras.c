@@ -135,7 +135,7 @@ void inputOlyBracket(int down, int tx, int ty) {
 // ══ SLOT MACHINE ══════════════════════════════════════════════════════════
 enum { Y_LOGO, Y_MEGA, Y_COIN, Y_CHAIR, Y_RED, Y_GREEN, Y_BLUE };
 static const int WEIGHT[7] = { 1, 2, 4, 5, 8, 8, 8 };
-static const u16 *SYM[7] = { slot_logo, slot_mega, slot_coin, slot_chair, slot_red, slot_green, slot_blue };
+static const u16 *SYM[7] = { slotSymT[0], slotSymT[1], slotSymT[2], slotSymT[3], slotSymT[4], slotSymT[5], slotSymT[6] };   // themed copies
 typedef struct { signed char s[3]; int win; const char *label; } Pay;   // -1 = any symbol
 static const Pay PAYS[] = {
     { { Y_LOGO, Y_LOGO, Y_LOGO }, 200, "JACKPOT" }, { { Y_MEGA, Y_MEGA, Y_MEGA }, 50, "MEGA QU33PH" },
@@ -216,7 +216,8 @@ void inputSlot(int down, int tx, int ty) {
 // ══ PLINQU33PH ════════════════════════════════════════════════════════════
 static const int BINS[7] = { 1, 2, 5, 10, 5, 2, 1 };
 #define PEG_ROWS 7
-typedef struct { float x, y, vx, vy, rot, spin; int live, done; } Ball;
+typedef struct { float x, y, vx, vy, rot, spin; int live, done, bin; } Ball;
+static int plBonusT; static char plBonusMsg[32];
 static Ball balls[3]; static int dropIdx, paid, aimX = 128, plWin, plSel, plTouch;
 static int pegX(int r, int c) { return 18 + c * 32 + (r % 2 ? 16 : 0); }
 static int pegY(int r) { return 34 + r * 18; }
@@ -260,9 +261,17 @@ void updatePlinko(void) {
         if (b->x > 250) { b->x = 250; b->vx = -b->vx * 0.5f; }
         if (b->y > 172) {
             int bin = (int)(b->x * 7 / 256); if (bin < 0) bin = 0; if (bin > 6) bin = 6;
-            b->live = 0; b->done = 1; b->y = 178;
+            // markers that land in the same hole pile up on each other, as on the website: they
+            // touch, and touching pays a bonus once the set's done (+10, or +25 if all 3 touch)
+            int under = 0; for (int k = 0; k < 3; k++) if (k != i && balls[k].done && balls[k].bin == bin) under++;
+            b->live = 0; b->done = 1; b->bin = bin; b->y = 178 - under * 7;
             addCoins(BINS[bin]); plWin += BINS[bin]; sfxPlop();
-            if (i == 2) saveWrite();       // once per set (writing to the SD card takes a moment), not per marker
+            if (balls[0].done && balls[1].done && balls[2].done) {
+                int pairs = (balls[0].bin == balls[1].bin) + (balls[0].bin == balls[2].bin) + (balls[1].bin == balls[2].bin);
+                int bonus = pairs >= 3 ? 25 : pairs >= 1 ? 10 : 0;
+                if (bonus) { addCoins(bonus); plWin += bonus; sprintf(plBonusMsg, pairs >= 3 ? "ALL 3 TOUCH +25" : "TOUCH +10"); plBonusT = 150; sfxPlop(); }
+                saveWrite();       // once per set (writing to the SD card takes a moment), not per marker
+            }
         }
     }
 }
@@ -286,10 +295,16 @@ void drawPlinko(void) {
     (void)bc;
     if (dropIdx >= 3) { int live = 0; for (int i = 0; i < 3; i++) live |= balls[i].live; if (!live) textC(bufTop, 118, "A or tap for another set", YELLOW, 1); }
     // the real markers, drawn on the bottom screen (gy 192+ = bottom), spinning as they fall
-    const u16 *PS[3] = { pm_red, pm_green, pm_blue }; const int PW[3] = { PM_RED_W, PM_GREEN_W, PM_BLUE_W }, PH[3] = { PM_RED_H, PM_GREEN_H, PM_BLUE_H };
+    // CARTOON uses the cartoon markers (with their bold colour outline); every theme gets its finish
+    int cart = sv.theme == 1;
+    const u16 *PS[3] = { cart ? mkc_red : pm_red, cart ? mkc_green : pm_green, cart ? mkc_blue : pm_blue };
+    const int PW[3] = { cart ? MKC_RED_W : PM_RED_W, cart ? MKC_GREEN_W : PM_GREEN_W, cart ? MKC_BLUE_W : PM_BLUE_W },
+              PH[3] = { cart ? MKC_RED_H : PM_RED_H, cart ? MKC_GREEN_H : PM_GREEN_H, cart ? MKC_BLUE_H : PM_BLUE_H };
+    float sc = cart ? 30.0f / MKC_RED_W : 1.0f;
     gClipLo = SH; gClipHi = 2 * SH;
-    for (int i = 0; i < 3; i++) if (balls[i].live || balls[i].done) blitRot(PS[i], PW[i], PH[i], (int)balls[i].x, SH + (int)balls[i].y, balls[i].rot);
-    if (dropIdx < 3) blitRot(PS[dropIdx], PW[dropIdx], PH[dropIdx], aimX, SH + 12, 1.5708f);
+    for (int i = 0; i < 3; i++) if (balls[i].live || balls[i].done) drawMarkerFx(PS[i], PW[i], PH[i], (int)balls[i].x, SH + (int)balls[i].y, balls[i].rot, sc, i);
+    if (dropIdx < 3) drawMarkerFx(PS[dropIdx], PW[dropIdx], PH[dropIdx], aimX, SH + 12, 1.5708f, sc, dropIdx);
+    if (plBonusT > 0) { plBonusT--; textC(bufBot, 150, plBonusMsg, COL(31, 26, 9), 1); }
     gClipLo = 0; gClipHi = 2 * SH;
 }
 void inputPlinko(int down, int held, int tx, int ty) {

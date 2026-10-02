@@ -27,7 +27,8 @@ enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, 
        S_ARCADE, S_MINI_MENU, S_MINI, S_MINI_PAUSE, S_MINI_OVER,
        S_BALL_MENU, S_BALL, S_BALL_PAUSE, S_BALL_OVER,
        S_FIDGET_MENU, S_FIDGET, S_FIDGET_PAUSE, S_FIDGET_OVER, S_COINREC,
-       S_BOWL_MENU, S_BOWL, S_BOWL_PAUSE, S_BOWL_OVER };
+       S_BOWL_MENU, S_BOWL, S_BOWL_PAUSE, S_BOWL_OVER,
+       S_STACK_MENU, S_STACK, S_STACK_PAUSE, S_STACK_OVER };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -101,7 +102,8 @@ void drawIndexed(const u8 *idx, const u16 *pal);
 void themeUI(int t);             // every screen's look for theme t: backgrounds, buttons, accents, logo
 extern u16 logoT[LOGO_W * LOGO_H];
 extern u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
-extern int iconFat;   // both screens from a 256-colour picture
+extern int iconFat;
+extern u16 coinT[COIN_W * COIN_H], icCoinBigT[IC_COINBIG_W * IC_COINBIG_H], slotSymT[7][SLOT_LOGO_W * SLOT_LOGO_H];   // both screens from a 256-colour picture
 void markerShape(u16 *buf, int x, int y, int w, int h, u16 edge, const u16 *grad);
 int textSW(const char *t); void textS(u16 *buf, int x, int y, const char *t, u16 col);
 void iconPlinko(u16 *buf, int x, int y, int s, u16 c); void iconGear(u16 *buf, int x, int y, int s, u16 c); void iconPalette(u16 *buf, int x, int y, int s, u16 c);
@@ -126,7 +128,7 @@ int  btnInput(Btn *b, int n, int *sel, int cols);   // returns pressed index or 
 // ── sound ─────────────────────────────────────────────────────────────────
 void sfxThrow(int orient); void sfxPeef(int orient); void sfxPlop(void);
 void musicStart(void); void musicStop(void); void musicToggle(void);
-enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL };
+enum { MUS_MAIN, MUS_MINI, MUS_BALL, MUS_FIDGET, MUS_BOWL, MUS_STACK };
 void musicSet(int track);        // switch tracks (restarts only if it changes)
 void musicTick(void);            // once per frame: loops the ADPCM tracks
 void playAdpcm(const u8 *d, int len, int rate, int vol);   // one-shot sound effect
@@ -191,7 +193,13 @@ int  bowlEnter(void); void bowlThemeChanged(void);
 void drawBowlMenu(void); void inputBowlMenu(void);
 void drawBowl(void); void inputBowl(void); void updateBowl(void);
 void drawBowlOver(void); void inputBowlOver(void);
-extern int gStip;                // 1 = draw sprites see-through (every other pixel)
+// Stack (stack.c)
+int  stackEnter(void); void stackThemeChanged(void);
+void drawStackMenu(void); void inputStackMenu(void);
+void drawStack(void); void inputStack(void); void updateStack(void);
+void drawStackOver(void); void inputStackOver(void);
+extern int gStip; extern u16 gSil; extern int gGlowShop;
+void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col);                // 1 = draw sprites see-through (every other pixel)
 
 // this frame's input (set once per frame in main.c)
 extern int kDown, kHeld, kUp, tX, tY;

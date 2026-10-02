@@ -4,6 +4,7 @@
 #include "assets_ball.h"
 #include "assets_fidget.h"
 #include "assets_bowl.h"
+#include "assets_stack.h"
 
 // ── the website's world (420 x 900) and the realistic field's layout ──────
 #define WORLD_H      900.0f
@@ -79,6 +80,7 @@ static int trackData(int t, const u8 **d, int *len, int *rate, int *frames) {
     if (t == MUS_BALL && pakIs(BALL_PAK)) { *d = bs_music; *len = BS_MUSIC_LEN; *rate = BS_MUSIC_RATE; *frames = BS_MUSIC_FRAMES; return 1; }
     if (t == MUS_FIDGET && pakIs(FIDGET_PAK)) { *d = fs_music; *len = FS_MUSIC_LEN; *rate = FS_MUSIC_RATE; *frames = FS_MUSIC_FRAMES; return 1; }
     if (t == MUS_BOWL && pakIs(BOWL_PAK)) { *d = bw_music; *len = BW_MUSIC_LEN; *rate = BW_MUSIC_RATE; *frames = BW_MUSIC_FRAMES; return 1; }
+    if (t == MUS_STACK && pakIs(STACK_PAK)) { *d = st_music; *len = ST_MUSIC_LEN; *rate = ST_MUSIC_RATE; *frames = ST_MUSIC_FRAMES; return 1; }
     if (t == MUS_MAIN) { *d = snd_music; *len = SND_MUSIC_LEN; *rate = SND_MUSIC_RATE; *frames = SND_MUSIC_FRAMES; return 1; }
     return 0;
 }
@@ -315,16 +317,19 @@ static void drawWorld(void) {
     for (int i = current; i < 3; i++) {
         const u16 *sp; int w, h; markerSprite(i, &sp, &w, &h);
         float a = orient == 0 ? 1.0472f : orient == 1 ? 1.5708f : 0.0f;
-        blitRot(sp, w, h, wsx((LEFT_EDGE + RIGHT_WALL) / 2), wsy(LAUNCH_Y - 30 - i * 46), a);
+        drawMarkerFx(sp, w, h, wsx((LEFT_EDGE + RIGHT_WALL) / 2), wsy(LAUNCH_Y - 30 - i * 46), a, 1.0f, i == 0 ? 1 : i == 1 ? 0 : 2);
     }
     if (suddenDeath) blitRot(chair, CHAIR_W, CHAIR_H, wsx(chairX), wsy(chairY), 0);
     for (int i = 0; i < current; i++) {
         Marker *m = &mk[i];
         if (m->fallen && m->x < LEFT_EDGE - 40) continue;
         if (shopActive(SH_TRAILS)) for (int k = 1; k < m->tn; k++) grect(wsx(m->tx[k]) - 1, wsy(m->ty[k]) - 1, 3, 3, MCOL[m->col]);
-        if (shopActive(SH_GLOW)) for (int a = -9; a <= 9; a += 3) for (int b = -9; b <= 9; b += 3) if (a * a + b * b <= 81) gpx(wsx(m->x) + a, wsy(m->y) + b, MCOL[m->col]);
+        // GLOW (shop) now glows round the marker's own shape; NEON glows green; CARTOON gets a bold
+        // outline in the marker's colour
         const u16 *s; int w, h; markerSprite(m->col, &s, &w, &h);
-        blitRot(s, w, h, wsx(m->x), wsy(m->y), m->rot);
+        gGlowShop = shopActive(SH_GLOW);
+        drawMarkerFx(s, w, h, wsx(m->x), wsy(m->y), m->rot, 1.0f, m->col == 0 ? 1 : m->col == 1 ? 0 : 2);
+        gGlowShop = 0;
     }
     if (current < 3 && (charging || chargeT > 0)) {   // the power marker grows out of the launch spot
         float len = charging ? (40 + power * 150) * K : 40 * K;

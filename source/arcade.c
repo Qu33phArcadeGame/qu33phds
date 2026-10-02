@@ -15,8 +15,8 @@
 
 // ══ ARCADE MENU ═══════════════════════════════════════════════════════════
 static const char *ARC_NAME[ARC_COUNT] = { "MINI QU33PH", "QU33PH-BALL", "FIDGET", "BOWLING", "STACK", "FLIP", "DOZER", "JUMP", "PINBALL" };
-static const int ARC_READY[ARC_COUNT] = { 1, 1, 1, 1, 0, 0, 0, 0, 0 };
-static const char *ARC_BLURB[ARC_COUNT] = { "four mini markers, three tables", "three machines, nine markers", "spinner air hockey, first to 3/5/7", "ten frames, marker pins" };
+static const int ARC_READY[ARC_COUNT] = { 1, 1, 1, 1, 1, 0, 0, 0, 0 };
+static const char *ARC_BLURB[ARC_COUNT] = { "four mini markers, three tables", "three machines, nine markers", "spinner air hockey, first to 3/5/7", "ten frames, marker pins", "drag & drop - build the tower" };
 static int arcErrT;                    // frames left to show "couldn't load" on the top screen
 static int arcSel;
 static Btn AB[ARC_COUNT + 1];
@@ -58,6 +58,7 @@ void inputArcade(void) {
     if (h == ARC_COUNT) { goScreen(S_TITLE); return; }
     if (h == ARC_MINI) { if (pakUse(MINI_PAK, MINI_PAK_SIZE, MINI_PAK_ID)) { miniThemeChanged(); goScreen(S_MINI_MENU); } else arcErrT = 240; }
     if (h == ARC_BALL) { if (ballEnter()) goScreen(S_BALL_MENU); else arcErrT = 240; }
+    if (h == ARC_STACK) { if (stackEnter()) goScreen(S_STACK_MENU); else arcErrT = 240; }
     if (h == ARC_BOWLING) { if (bowlEnter()) goScreen(S_BOWL_MENU); else arcErrT = 240; }
     if (h == ARC_FIDGET) { if (fidgetEnter()) goScreen(S_FIDGET_MENU); else arcErrT = 240; }
 }
@@ -98,7 +99,7 @@ static u16 palT[256];                  // the table's palette through the curren
 
 void miniThemeChanged(void) { for (int i = 0; i < 256; i++) palT[i] = themeTint(mini_pal[i], sv.theme); }
 // the theme changed: recolour whichever arcade game is loaded (the others recolour when opened)
-void arcadeThemeChanged(void) { if (pakIs(MINI_PAK)) miniThemeChanged(); if (pakIs(BALL_PAK)) ballThemeChanged(); fidgetThemeChanged(); bowlThemeChanged(); }
+void arcadeThemeChanged(void) { if (pakIs(MINI_PAK)) miniThemeChanged(); if (pakIs(BALL_PAK)) ballThemeChanged(); fidgetThemeChanged(); bowlThemeChanged(); stackThemeChanged(); }
 
 // ── popups & the end-of-turn breakdown ────────────────────────────────────
 typedef struct { char t[32]; u16 c; int life, big, peef; } Pop;

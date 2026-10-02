@@ -50,6 +50,7 @@ void drawIndexed(const u8 *idx, const u16 *pal) {
 // rotated (and scaled) sprite, whole-number maths in the loop (16.16 fixed point). Only the
 // stretch of each row that actually lands inside the sprite is walked, and pixels are written
 // straight into the row instead of through gpx().
+u16 gSil;                                    // draw a sprite's silhouette in one colour (outlines, glows)
 int gStip;                                   // see-through: skip every other pixel (a cheap 50% fade)
 static void blitCore(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale) {
     if (scale <= 0.01f) return;
@@ -77,7 +78,7 @@ static void blitCore(const u16 *spr, int w, int h, int cx, int cy, float ang, fl
             int ix = sxf >> 16, iy = syf >> 16;
             if ((unsigned)ix >= (unsigned)w || (unsigned)iy >= (unsigned)h) continue;
             u16 p = spr[iy * w + ix];
-            if ((p & 0x8000) && !(gStip && (((cx + dx) ^ gy) & 1))) row[cx + dx] = p;
+            if ((p & 0x8000) && !(gStip && (((cx + dx) ^ gy) & 1))) row[cx + dx] = gSil ? gSil : p;
         }
     }
 }
@@ -179,7 +180,7 @@ void scoreStr(char *o, int doubled) {
     else sprintf(o, "%d", doubled / 2);
 }
 void coinCount(u16 *buf, int x, int y) {
-    char s[16]; blit(buf, coin, COIN_W, COIN_H, x, y); sprintf(s, "%d", sv.coins);
+    char s[16]; blitInk(buf, coinT, COIN_W, COIN_H, x, y, uiInk); sprintf(s, "%d", sv.coins);
     text(buf, x + COIN_W + 4, y + 2, s, GOLD, 1);
 }
 
@@ -191,6 +192,7 @@ void coinCount(u16 *buf, int x, int y) {
 // recoloured by the same themeTint the website-style filters are modelled on.
 u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18), uiIcon = COL(19, 19, 20);
 u16 logoT[LOGO_W * LOGO_H];
+u16 coinT[COIN_W * COIN_H], icCoinBigT[IC_COINBIG_W * IC_COINBIG_H], slotSymT[7][SLOT_LOGO_W * SLOT_LOGO_H];
 u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
 int iconFat;                                 // extra thickness for the icons' outline pass
 static u16 uiEdge = COL(31, 31, 31), uiSel = COL(31, 26, 4), uiGradTop = COL(7, 7, 7), uiGradMid = COL(2, 2, 2), uiGradEnd = COL(0, 0, 0);
@@ -267,6 +269,13 @@ void themeUI(int t) {
     TINT(icArcadeT, ic_arcade, IC_ARCADE_W * IC_ARCADE_H)
     for (int i = 0; i < IC_COIN_W * IC_COIN_H; i++)                // the coin keeps more of its gold so it still reads as a coin
         icCoinT[i] = (ic_coin[i] & 0x8000) ? (t <= 1 ? themeTint(ic_coin[i], t) : mix(ic_coin[i], themeTint(ic_coin[i], t), 1, 3)) : 0;
+    // every coin picture and the slot machine's symbols take the theme too (CARTOON: grey)
+    #define CTINT(dst, src, n) for (int i = 0; i < (n); i++) dst[i] = (src[i] & 0x8000) ? (t <= 1 ? themeTint(src[i], t) : mix(src[i], themeTint(src[i], t), 1, 3)) : 0;
+    CTINT(coinT, coin, COIN_W * COIN_H)
+    CTINT(icCoinBigT, ic_coinbig, IC_COINBIG_W * IC_COINBIG_H)
+    { const u16 *S[7] = { slot_logo, slot_mega, slot_coin, slot_chair, slot_red, slot_green, slot_blue };
+      for (int k = 0; k < 7; k++) { CTINT(slotSymT[k], S[k], SLOT_LOGO_W * SLOT_LOGO_H) } }
+    #undef CTINT
     #undef TINT
     uiDotRed = t <= 0 ? COL(31, 10, 10) : themeTint(COL(31, 10, 10), t);
     uiInk = t == 1 ? BLACK : t == 4 ? COL(0, 6, 2) : t == 2 ? COL(1, 2, 7) : (t == 3 || t == 5) ? COL(7, 4, 0) : COL(1, 1, 1);
@@ -465,4 +474,28 @@ void blitInk(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 ink) {
     for (int k = 0; k < 8; k++) for (int j = 0; j < h; j++) { int yy = y + j + O[k][1]; if ((unsigned)yy >= SH) continue;
         for (int i = 0; i < w; i++) { int xx = x + i + O[k][0]; if ((unsigned)xx < SW && (spr[j * w + i] & 0x8000)) buf[yy * SW + xx] = ink; } }
     blit(buf, spr, w, h, x, y);
+}
+
+// ── markers with the theme's finish ─────────────────────────────────────────
+// CARTOON: a bold outline in the marker's own colour. NEON (or the shop's GLOW): a soft glow
+// round it. col: 0 red, 1 green, 2 blue (-1 = no colour of its own).
+int gGlowShop;
+static const u16 MK_COLS[3] = { COL(31, 7, 7), COL(7, 29, 9), COL(9, 14, 31) };
+void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col) {
+    int neon = sv.theme == 4, cart = sv.theme == 1, st = gStip;
+    if (neon || gGlowShop) {
+        u16 g = neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20));
+        static const signed char R3[12][2] = { {-3,0},{3,0},{0,-3},{0,3},{-2,-2},{2,-2},{-2,2},{2,2},{-3,-1},{3,1},{-1,3},{1,-3} };
+        gSil = mix(g, BLACK, 1, 2); gStip = 1;
+        for (int k = 0; k < 12; k++) blitCore(spr, w, h, cx + R3[k][0], cy + R3[k][1], ang, scale);
+        gSil = g; gStip = 0;
+        for (int k = 0; k < 4; k++) blitCore(spr, w, h, cx + (k == 0) - (k == 1), cy + (k == 2) - (k == 3), ang, scale);
+    }
+    if (cart && col >= 0) {
+        static const signed char R2[8][2] = { {-2,0},{2,0},{0,-2},{0,2},{-1,-1},{1,-1},{-1,1},{1,1} };
+        gSil = MK_COLS[col]; gStip = 0;
+        for (int k = 0; k < 8; k++) blitCore(spr, w, h, cx + R2[k][0], cy + R2[k][1], ang, scale);
+    }
+    gSil = 0; gStip = st;
+    blitCore(spr, w, h, cx, cy, ang, scale);
 }

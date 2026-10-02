@@ -315,7 +315,7 @@ static const u16 *pinSpr(int c, int *w, int *h) {
 }
 static void marker(int c, float x, float y, float h, float rot, int stip) {   // a marker 'h' pixels tall, centred at x,y
     int w, sh; const u16 *s = pinSpr(c, &w, &sh);
-    gStip = stip; blitRotScale(s, w, sh, (int)x, (int)y, rot, h / sh); gStip = 0;
+    gStip = stip; drawMarkerFx(s, w, sh, (int)x, (int)y, rot, h / sh, c); gStip = 0;
 }
 static void shadow(float x, float y, float h, float rot) {          // the website's capsule shadow, flattened
     float c = fcos(-rot), s = fsin(-rot);

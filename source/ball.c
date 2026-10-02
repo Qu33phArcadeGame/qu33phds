@@ -314,8 +314,8 @@ void inputBall(void) {
 // ── drawing ───────────────────────────────────────────────────────────────
 static void markerAt(int col, float fx, float fy, float scale, float rot) {
     int cart = sv.theme == 1; float w = 0.11f * BW * scale;
-    if (col == 2) blitRotScale(cart ? mkc_blue : mk_blue, MK_BLUE_W, MK_BLUE_H, GX(fx), GY(fy), rot, w / MK_BLUE_W);
-    else blitRotScale(col == 0 ? (cart ? mkc_red : mk_red) : (cart ? mkc_green : mk_green), MK_GREEN_W, MK_GREEN_H, GX(fx), GY(fy), rot, w / MK_GREEN_W);
+    if (col == 2) drawMarkerFx(cart ? mkc_blue : mk_blue, MK_BLUE_W, MK_BLUE_H, GX(fx), GY(fy), rot, w / MK_BLUE_W, 2);
+    else drawMarkerFx(col == 0 ? (cart ? mkc_red : mk_red) : (cart ? mkc_green : mk_green), MK_GREEN_W, MK_GREEN_H, GX(fx), GY(fy), rot, w / MK_GREEN_W, col);
 }
 static void drawField(void) {
     const u8 *F[3] = { bb_field0, bb_field1, bb_field2 };

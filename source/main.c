@@ -377,7 +377,7 @@ static void drawCoinRecord(void) {
     fillScreen(bufTop, DARK);
     textC(bufTop, 6, "COIN RECORD", WHITE, 2);
     gClipLo = 0; gClipHi = 2 * SH;
-    blitRotScale(coin, COIN_W, COIN_H, SW / 2, 110, 0, 4.0f);
+    blitInk(bufTop, icCoinBigT, IC_COINBIG_W, IC_COINBIG_H, (SW - IC_COINBIG_W) / 2, 110 - IC_COINBIG_H / 2, uiInk);
     sprintf(v, "%d", sv.coins); textC(bufTop, 156, v, GOLD, 2);
     fillScreen(bufBot, DARK);
     const char *L[7] = { "Current balance", "Coins earned (all time)", "Coins spent (all time)", "Net saved", "Slot machine wins", "Coins lost in slots", "Games forfeited" };
@@ -526,12 +526,16 @@ int main(void) {
             case S_BOWL_MENU: inputBowlMenu(); break;
             case S_BOWL: case S_BOWL_PAUSE: inputBowl(); if (screen == S_BOWL) updateBowl(); break;
             case S_BOWL_OVER: inputBowlOver(); break;
+            case S_STACK_MENU: inputStackMenu(); break;
+            case S_STACK: case S_STACK_PAUSE: inputStack(); if (screen == S_STACK) updateStack(); break;
+            case S_STACK_OVER: inputStackOver(); updateStack(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
         musicSet(screen >= S_MINI_MENU && screen <= S_MINI_OVER ? MUS_MINI : screen >= S_BALL_MENU && screen <= S_BALL_OVER ? MUS_BALL :
                  screen >= S_FIDGET_MENU && screen <= S_FIDGET_OVER ? MUS_FIDGET :
-                 screen >= S_BOWL_MENU && screen <= S_BOWL_OVER ? MUS_BOWL : MUS_MAIN);
+                 screen >= S_BOWL_MENU && screen <= S_BOWL_OVER ? MUS_BOWL :
+                 screen >= S_STACK_MENU && screen <= S_STACK_OVER ? MUS_STACK : MUS_MAIN);
         musicTick();
         switch (screen) {
             case S_TITLE: drawTitle(); break;
@@ -564,6 +568,9 @@ int main(void) {
             case S_BOWL_MENU: drawBowlMenu(); break;
             case S_BOWL: case S_BOWL_PAUSE: drawBowl(); break;
             case S_BOWL_OVER: drawBowlOver(); break;
+            case S_STACK_MENU: drawStackMenu(); break;
+            case S_STACK: case S_STACK_PAUSE: drawStack(); break;
+            case S_STACK_OVER: drawStackOver(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first
