@@ -169,9 +169,9 @@ static void step(float dt) {
 // ── the game ──────────────────────────────────────────────────────────────
 enum { ST_PLAY, ST_OVER };
 static int state, score, overT, cur = -1, placed[MAXB], nPlaced, horizontal, coinsWon, newBest, overSel, menuSel;
-static float camY, camScale = 1, bgScroll; static V2 target; static int haveTarget;
+static float camY, camScale = 1; static V2 target; static int haveTarget;
 static u16 palT[256];
-static const u8 *bgImg(void) { return (sv.theme == 1 || sv.theme == 4) ? st_winp : st_win; }
+static const u8 *stBgImg(void) { return (sv.theme == 1 || sv.theme == 4) ? st_winp : st_win; }
 void stackThemeChanged(void) {
     if (!pakIs(STACK_PAK)) return;
     // the website draws its window tile over the theme's backdrop, then darkens it so the tower
@@ -312,7 +312,7 @@ void inputStack(void) {
 // ── drawing ───────────────────────────────────────────────────────────────
 static void drawBg(void) {
     // the window tile, scrolling at the website's slow parallax (0.16 of the camera)
-    const u8 *img = bgImg(); int H = ST_WIN_H;
+    const u8 *img = stBgImg(); int H = ST_WIN_H;
     int off = ((int)(camY * 0.16f) % H + H) % H;
     for (int gy = 0; gy < 2 * SH; gy++) {
         int sy = ((gy - off) % H + H) % H; const u8 *s = &img[sy * SW];

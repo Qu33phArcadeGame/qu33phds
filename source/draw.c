@@ -108,10 +108,10 @@ void rect(u16 *buf, int x, int y, int w, int h, u16 c) {
     int x0 = x < 0 ? 0 : x, x1 = x + w > SW ? SW : x + w, y0 = y < 0 ? 0 : y, y1 = y + h > SH ? SH : y + h;
     for (int yy = y0; yy < y1; yy++) hfill(&buf[yy * SW], x0, x1, c);
 }
-static u16 bgImg[2][SW * SH] __attribute__((aligned(32)));   // this theme's menu backgrounds (top, bottom)
-static int bgOK;
+static u16 themeBgImg[2][SW * SH] __attribute__((aligned(32)));   // this theme's menu backgrounds (top, bottom)
+static int themeBgOK;
 void fillScreen(u16 *buf, u16 c) {
-    if (c == DARK && bgOK) { memcpy(buf, buf == bufTop ? bgImg[0] : bgImg[1], SW * SH * 2); return; }
+    if (c == DARK && themeBgOK) { memcpy(buf, buf == bufTop ? themeBgImg[0] : themeBgImg[1], SW * SH * 2); return; }
     u32 cc = c | ((u32)c << 16), *d = (u32 *)buf;
     for (int i = 0; i < SW * SH / 16; i++) { d[0] = cc; d[1] = cc; d[2] = cc; d[3] = cc; d[4] = cc; d[5] = cc; d[6] = cc; d[7] = cc; d += 8; }
 }
@@ -203,11 +203,11 @@ static u16 mix(u16 a, u16 b, int k, int n) {          // a -> b, k of n
     int ar = a & 31, ag = (a >> 5) & 31, ab = (a >> 10) & 31, br = b & 31, bg = (b >> 5) & 31, bb = (b >> 10) & 31;
     return COL(ar + (br - ar) * k / n, ag + (bg - ag) * k / n, ab + (bb - ab) * k / n);
 }
-static void bgPx(int x, int gy, u16 c) { if ((unsigned)x < SW && (unsigned)gy < 2 * SH) bgImg[gy / SH][(gy % SH) * SW + x] = c; }
-static void bgGrad(u16 top, u16 mid, u16 bot) {        // one gradient down both screens
+static void themePx(int x, int gy, u16 c) { if ((unsigned)x < SW && (unsigned)gy < 2 * SH) themeBgImg[gy / SH][(gy % SH) * SW + x] = c; }
+static void themeGrad(u16 top, u16 mid, u16 bot) {        // one gradient down both screens
     for (int gy = 0; gy < 2 * SH; gy++) {
         u16 c = gy < SH ? mix(top, mid, gy, SH) : mix(mid, bot, gy - SH, SH);
-        for (int x = 0; x < SW; x++) bgImg[gy / SH][(gy % SH) * SW + x] = c;
+        for (int x = 0; x < SW; x++) themeBgImg[gy / SH][(gy % SH) * SW + x] = c;
     }
 }
 void themeUI(int t) {
@@ -216,48 +216,48 @@ void themeUI(int t) {
     default:                                            // REALISTIC: as it always was
         uiGold = COL(31, 24, 2); uiYellow = COL(31, 27, 4); uiGrey = COL(18, 18, 18);
         uiEdge = WHITE; uiSel = COL(31, 26, 4); uiGradTop = COL(7, 7, 7); uiGradMid = COL(2, 2, 2); uiGradEnd = BLACK;
-        bgGrad(DARK, DARK, DARK);
+        themeGrad(DARK, DARK, DARK);
         break;
     case 1:                                             // CARTOON: newsprint with halftone dots, ink outlines
         uiGold = COL(31, 22, 0); uiYellow = COL(31, 29, 6); uiGrey = COL(23, 23, 22);
         uiEdge = BLACK; uiSel = COL(31, 6, 6); uiGradTop = COL(14, 14, 14); uiGradMid = COL(6, 6, 6); uiGradEnd = COL(2, 2, 2);
-        bgGrad(COL(28, 27, 24), COL(26, 25, 22), COL(24, 23, 20));
+        themeGrad(COL(28, 27, 24), COL(26, 25, 22), COL(24, 23, 20));
         for (int gy = 0; gy < 2 * SH; gy += 6) for (int x = (gy / 6 % 2) * 3; x < SW; x += 6) {
             int r = 1 + (gy * 2 / (2 * SH));            // dots grow down the screens, like a comic panel's shading
-            for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) if (i * i + j * j <= r * r) bgPx(x + i, gy + j, COL(19, 18, 16));
+            for (int j = -r; j <= r; j++) for (int i = -r; i <= r; i++) if (i * i + j * j <= r * r) themePx(x + i, gy + j, COL(19, 18, 16));
         }
-        for (int gy = 0; gy < 2 * SH; gy++) { bgPx(0, gy, BLACK); bgPx(1, gy, BLACK); bgPx(SW - 1, gy, BLACK); bgPx(SW - 2, gy, BLACK); }
-        for (int x = 0; x < SW; x++) { bgPx(x, 0, BLACK); bgPx(x, 1, BLACK); bgPx(x, 2 * SH - 1, BLACK); bgPx(x, 2 * SH - 2, BLACK); }
+        for (int gy = 0; gy < 2 * SH; gy++) { themePx(0, gy, BLACK); themePx(1, gy, BLACK); themePx(SW - 1, gy, BLACK); themePx(SW - 2, gy, BLACK); }
+        for (int x = 0; x < SW; x++) { themePx(x, 0, BLACK); themePx(x, 1, BLACK); themePx(x, 2 * SH - 1, BLACK); themePx(x, 2 * SH - 2, BLACK); }
         break;
     case 2:                                             // NIGHT: deep blue sky, stars, a moon
         uiGold = COL(29, 27, 14); uiYellow = COL(31, 30, 20); uiGrey = COL(15, 17, 23);
         uiEdge = COL(20, 24, 31); uiSel = COL(31, 29, 14); uiGradTop = COL(5, 7, 15); uiGradMid = COL(1, 2, 6); uiGradEnd = COL(0, 0, 2);
-        bgGrad(COL(0, 1, 4), COL(2, 3, 9), COL(1, 1, 5));
+        themeGrad(COL(0, 1, 4), COL(2, 3, 9), COL(1, 1, 5));
         for (int i = 0; i < 220; i++) { int x = rnd(SW), y = rnd(2 * SH), b = 14 + rnd(18); u16 c = COL(b, b, b > 28 ? 31 : b + 3);
-            bgPx(x, y, c); if (b > 27) { bgPx(x + 1, y, c); bgPx(x - 1, y, c); bgPx(x, y + 1, c); bgPx(x, y - 1, c); } }
+            themePx(x, y, c); if (b > 27) { themePx(x + 1, y, c); themePx(x - 1, y, c); themePx(x, y + 1, c); themePx(x, y - 1, c); } }
         for (int j = -14; j <= 14; j++) for (int i = -14; i <= 14; i++) { int d = i * i + j * j, e = (i + 6) * (i + 6) + (j - 4) * (j - 4);
-            if (d <= 196 && e > 160) bgPx(222 + i, 30 + j, COL(29, 29, 24)); }
+            if (d <= 196 && e > 160) themePx(222 + i, 30 + j, COL(29, 29, 24)); }
         break;
     case 4:                                             // NEON: the website's glowing green, on black
         uiGold = COL(8, 31, 15); uiYellow = COL(20, 31, 24); uiGrey = COL(13, 24, 17);
         uiEdge = COL(6, 31, 15); uiSel = COL(26, 31, 28); uiGradTop = COL(1, 11, 5); uiGradMid = COL(0, 4, 2); uiGradEnd = COL(0, 1, 0);
-        bgGrad(COL(0, 3, 1), COL(0, 1, 0), COL(0, 3, 1));
+        themeGrad(COL(0, 3, 1), COL(0, 1, 0), COL(0, 3, 1));
         for (int gy = 0; gy < 2 * SH; gy++) for (int x = 0; x < SW; x++) {
             int g = (x % 24 == 0 || gy % 24 == 0);
-            if (g) bgPx(x, gy, COL(1, 13, 6));
+            if (g) themePx(x, gy, COL(1, 13, 6));
             int e = x < 4 ? 4 - x : x >= SW - 4 ? x - (SW - 5) : 0;                  // glowing tubes down both edges
-            if (e) bgPx(x, gy, e >= 3 ? COL(4, 20, 10) : COL(14, 31, 20));
+            if (e) themePx(x, gy, e >= 3 ? COL(4, 20, 10) : COL(14, 31, 20));
         }
-        for (int x = 0; x < SW; x++) for (int k = 0; k < 3; k++) { bgPx(x, SH - 2 + k, COL(8, 31, 16)); }   // a tube along the screen gap
+        for (int x = 0; x < SW; x++) for (int k = 0; k < 3; k++) { themePx(x, SH - 2 + k, COL(8, 31, 16)); }   // a tube along the screen gap
         break;
     case 3:                                             // (SUNSET shows GOLDEN)
     case 5:                                             // GOLDEN: warm dark gold with sparkle
         uiGold = COL(31, 27, 6); uiYellow = COL(31, 31, 16); uiGrey = COL(27, 22, 12);
         uiEdge = COL(31, 26, 6); uiSel = COL(31, 31, 24); uiGradTop = COL(20, 14, 2); uiGradMid = COL(8, 5, 0); uiGradEnd = COL(3, 2, 0);
-        bgGrad(COL(16, 10, 1), COL(7, 4, 0), COL(18, 12, 2));
-        for (int gy = 0; gy < 2 * SH; gy += 3) for (int x = (gy / 3 % 2) * 3; x < SW; x += 6) bgPx(x, gy, COL(24, 17, 3));   // gold-leaf grain
+        themeGrad(COL(16, 10, 1), COL(7, 4, 0), COL(18, 12, 2));
+        for (int gy = 0; gy < 2 * SH; gy += 3) for (int x = (gy / 3 % 2) * 3; x < SW; x += 6) themePx(x, gy, COL(24, 17, 3));   // gold-leaf grain
         for (int i = 0; i < 140; i++) { int x = rnd(SW), y = rnd(2 * SH), b = rnd(3);
-            bgPx(x, y, COL(31, 28, 12)); if (!b) for (int k = 1; k < 4; k++) { u16 c = COL(28 - k * 4, 22 - k * 4, 6); bgPx(x + k, y, c); bgPx(x - k, y, c); bgPx(x, y + k, c); bgPx(x, y - k, c); } }
+            themePx(x, y, COL(31, 28, 12)); if (!b) for (int k = 1; k < 4; k++) { u16 c = COL(28 - k * 4, 22 - k * 4, 6); themePx(x + k, y, c); themePx(x - k, y, c); themePx(x, y + k, c); themePx(x, y - k, c); } }
         break;
     }
     uiIcon = t == 1 ? COL(3, 3, 3) : t == 2 ? COL(18, 21, 27) : t == 4 ? COL(9, 31, 15) : (t == 3 || t == 5) ? COL(31, 24, 7) : COL(19, 19, 20);
@@ -279,7 +279,7 @@ void themeUI(int t) {
     #undef TINT
     uiDotRed = t <= 0 ? COL(31, 10, 10) : themeTint(COL(31, 10, 10), t);
     uiInk = t == 1 ? BLACK : t == 4 ? COL(0, 6, 2) : t == 2 ? COL(1, 2, 7) : (t == 3 || t == 5) ? COL(7, 4, 0) : COL(1, 1, 1);
-    bgOK = 1;
+    themeBgOK = 1;
 }
 
 // ── buttons ───────────────────────────────────────────────────────────────
