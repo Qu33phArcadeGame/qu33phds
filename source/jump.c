@@ -260,9 +260,114 @@ static void cull(void) {                                // forget what's far beh
     k = 0; for (int i = 0; i < nCo; i++) if (!co[i].got && co[i].y < camY + pm && co[i].x > camX - bx) co[k++] = co[i]; nCo = k;
     k = 0; for (int i = 0; i < nPi; i++) if (pi[i].x + pi[i].w > camX - bx) pi[k++] = pi[i]; nPi = k;
 }
+
+// ══ COMBO: the course as a row of separate ZONES ═════════════════════════════
+// Each zone owns its own stretch of the world (left to right) and builds everything in it at
+// once, so zones never overlap, a flappy corridor is always clear, and the next zone is ready
+// well before you reach it. Zones: RUN, GAUNTLET, STAIRS, CLIMB (a tower in its own column),
+// BOUNCE (chair chain), FLAP (chair, pipes, landing) and MEGA (chair launch to the Mega pad).
+enum { Z_RUN, Z_GAUNT, Z_STAIRS, Z_CLIMB, Z_BOUNCE, Z_FLAP, Z_MEGA, Z_N };
+static float zX, zY; static int zCount, zLast = -1, zSinceFlap, zSinceMega;
+static Plat *pad(float x, float y, float w) { Plat *q = addPlat(x, y, w); if (q) q->ground = 1; return q; }
+static float stepGap(void) { float g = W * (0.07f + rnd() * 0.08f); return g < GAPMAX * 0.8f ? g : GAPMAX * 0.8f; }
+static void zRun(void) {
+    float end = zX + W * (1.4f + rnd() * 0.8f), x = zX;
+    while (x < end) {
+        float w = W * (0.45f + rnd() * 0.4f); pad(x, zY, w);
+        if (zCount > 1 && rnd() < 0.55f) { addObs(x + w * (0.35f + rnd() * 0.3f), zY, 20, 30);
+            if (progress > 20 && rnd() < 0.4f) patrol(&ob[nOb - 1], x + 10, x + w - 10, w * 0.35f, 0.6f); }
+        if (rnd() < 0.55f) addCoin(x + w * 0.5f, zY - H * (0.13f + rnd() * 0.08f));
+        x += w + (rnd() < 0.5f ? stepGap() : 0);
+    }
+    zX = x;
+}
+static void zGauntlet(void) {
+    int n = 4 + rand() % 3; float x = zX, y = zY;
+    for (int k = 0; k < n; k++) {
+        float w = W * (0.22f + rnd() * 0.1f); pad(x, y, w);
+        addObs(x + w * (0.4f + rnd() * 0.25f), y, 20, 30);
+        if (rnd() < 0.5f) patrol(&ob[nOb - 1], x + 10, x + w - 10, w * 0.35f, 0.6f);
+        if (rnd() < 0.5f) addCoin(x + w * 0.5f, y - H * 0.16f);
+        x += w + stepGap(); y += (rnd() - 0.5f) * 30;
+    }
+    pad(x, y, W * 0.4f); zX = x + W * 0.4f; zY = y;
+}
+static void zStairs(void) {
+    int n = 5 + rand() % 4; float dir = rnd() < 0.6f ? -1 : 1, x = zX, y = zY, sw = W * 0.15f + 8;
+    for (int k = 0; k < n; k++) { pad(x, y, sw + 6); if (k > 1 && k < n - 1 && k % 3 == 0) addObs(x + sw * 0.5f, y, 18, 26); if (rnd() < 0.35f) addCoin(x + sw * 0.5f, y - 26); x += sw; y += dir * 30; }
+    pad(x, y, W * 0.45f); zX = x + W * 0.45f; zY = y;
+}
+static void zClimb(void) {
+    // a tower in its own column: up 6-9 platforms, zigzagging left and right inside the column,
+    // then an exit pad on the column's right edge at the top
+    float colL = zX + W * 0.05f, colW = W * 0.8f, y = zY, px = colL + colW * 0.2f;
+    pad(zX, zY, W * 0.3f);
+    int n = 6 + rand() % 4;
+    for (int k = 0; k < n; k++) {
+        float r = 48 + rnd() * 16; y -= r < RISEMAX ? r : RISEMAX;
+        float w = W * (0.17f + rnd() * 0.07f);
+        px += (rnd() < 0.5f ? -1 : 1) * (W * (0.12f + rnd() * 0.12f)); if (px < colL) px = colL + W * 0.06f; if (px > colL + colW - w) px = colL + colW - w - W * 0.06f;
+        Plat *q = addPlat(px, y, w);
+        if (q && progress > 18 && k > 1 && rnd() < 0.25f) { q->moving = 1; q->baseX = q->x; q->amp = W * 0.07f; q->spd = 0.02f + rnd() * 0.02f; q->phase = rnd() * 6.28f; }
+        if (rnd() < 0.5f) addCoin(px + w * 0.5f, y - 26);
+    }
+    y -= 46; pad(colL + colW - W * 0.32f, y, W * 0.32f); zX = colL + colW; zY = y;
+}
+static void zBounce(void) {
+    pad(zX, zY, W * 0.4f);
+    int n = 5 + rand() % 3; float sx = zX + W * 0.6f, sy = zY - 30, gap = W * 0.36f;
+    for (int i = 0; i < n; i++) { Plat *q = addPlat(sx - 30, sy, 60); if (q) { q->chair = 1; q->chain = 1; } if (rnd() < 0.6f) addCoin(sx, sy - 40); sx += gap; sy -= 16; }
+    float floorY = zY + H * 0.3f; pad(zX + W * 0.4f, floorY, sx - zX);         // a floor under the chain to catch misses
+    float exitY = sy + 40; pad(sx, exitY, W * 0.5f); zX = sx + W * 0.5f; zY = exitY;
+}
+static void zFlap(void) {
+    // the run-up and the big chair, then the pipe corridor (nothing else is ever built in it),
+    // then a wide landing pad
+    pad(zX, zY, W * 0.4f);
+    float chx = zX + W * 0.4f; Plat *q = addPlat(chx, zY + 6, W * 0.26f); if (q) { q->chair = 1; q->flappy = 1; }
+    float bandY = zY - H * 0.34f; flappyFloorY = bandY + H * 0.62f; flappyCeilY = bandY - H * 0.66f;
+    int n = 5 + rand() % 3; float gap = W * 0.52f, gapH = H * 0.47f, pw = W * 0.26f, x = chx + W * 0.85f, cy = bandY, lastX = x;
+    for (int i = 0; i < n && nPi < NPI; i++) {
+        cy += (rnd() - 0.5f) * H * 0.4f; if (cy < bandY - H * 0.28f) cy = bandY - H * 0.28f; if (cy > bandY + H * 0.28f) cy = bandY + H * 0.28f;
+        pi[nPi++] = (Pipe){ x, pw, cy, gapH, 0, (u8)(i % 3) }; addCoin(x + pw * 0.5f, cy); lastX = x; x += gap;
+    }
+    flappyEndX = lastX + pw + W * 0.12f;
+    float landX = lastX + gap * 0.9f, landY = cy + H * 0.2f;
+    pad(landX - W * 0.35f, landY, W * 0.9f); zX = landX + W * 0.55f; zY = landY;
+}
+static void zMega(void) {
+    float chx = zX + W * 0.3f, gy0 = zY;
+    pad(zX, zY, W * 0.6f);
+    Plat *q = addPlat(chx - 30, gy0 - 20, 60); if (q) q->chair = 1;
+    float mx = chx + 326 + rnd() * 26, my = gy0 - (237 + rnd() * 7);
+    mega.x = mx; mega.y = my; mega.w = 42; mega.h = 30; mega.hit = 0; mega.on = 1;
+    float st[7][3] = { { mx - 72, my + 48, 150 }, { chx + 90, gy0 - 118, W * 0.22f }, { chx + 205, gy0 - 186, W * 0.22f }, { mx + 50, my + 96, W * 0.26f },
+                       { chx + 150, gy0 - 66, W * 0.24f }, { mx + 96, my - 44, W * 0.2f }, { mx + 178, my - 112, W * 0.2f } };
+    for (int k = 0; k < 7; k++) { q = addPlat(st[k][0], st[k][1], st[k][2]); if (q) { q->ground = 1; q->mz = 1; } }
+    pad(chx + 30, gy0, (mx + W * 0.4f) - (chx + 30));                         // ground all along under it
+    zX = mx + W * 0.4f; zY = gy0;
+}
+static void comboZone(void) {
+    int z;
+    if (zCount == 0) z = Z_RUN;
+    else if (zCount > 2 && zSinceFlap >= 3) z = Z_FLAP;                        // a flappy zone at least every 4th zone
+    else if (zCount > 3 && zSinceMega >= 5 && !mega.on) z = Z_MEGA;
+    else { static const u8 POOL[] = { Z_RUN, Z_GAUNT, Z_STAIRS, Z_CLIMB, Z_CLIMB, Z_BOUNCE, Z_RUN };
+           do z = POOL[rand() % sizeof POOL]; while (z == zLast); }
+    float gap = zCount ? stepGap() * 0.6f : 0; zX += gap;                       // a short, always-jumpable gap between zones
+    switch (z) { case Z_RUN: zRun(); break; case Z_GAUNT: zGauntlet(); break; case Z_STAIRS: zStairs(); break; case Z_CLIMB: zClimb(); break;
+                 case Z_BOUNCE: zBounce(); break; case Z_FLAP: zFlap(); break; default: zMega(); break; }
+    zSinceFlap = z == Z_FLAP ? 0 : zSinceFlap + 1; zSinceMega = z == Z_MEGA ? 0 : zSinceMega + 1;
+    zLast = z; zCount++; cycles++;
+}
 static void genPath(void) {
     if (flapEndless) { flapSpawnAhead(); if ((frame & 7) == 0) cull(); return; }
     float za = 1 / (zoom < 0.4f ? 0.4f : zoom);
+    if (jMode == M_COMBO) {                           // COMBO: build whole zones ahead of you
+        for (int g = 0; g < 4 && zX < camX + W * 2.7f * za; g++) { if (nPl >= NPL - 40) { cull(); if (nPl >= NPL - 40) break; } comboZone(); }
+        if ((frame & 7) == 0) cull();
+        return;
+    }
     for (int g = 0; g < 800; g++) {
         if (genMode == 0) { if (genY <= camY - H * 1.8f * za) break; } else if (genX >= camX + W * 2.7f * za) break;
         if (nPl >= NPL - 12) { cull(); if (nPl >= NPL - 12) break; }
@@ -286,6 +391,7 @@ static void startRun(int m) {
         zoom = zoomT = ch()->cls == 1 ? 0.80f : 0.66f; flappyFreeze = 1;
     } else {
         Plat *q = addPlat(startX - W * 0.28f, startY, W * 0.56f); q->ground = 1;
+        if (m == M_COMBO) { zX = startX + W * 0.28f; zY = startY; zCount = 0; zLast = -1; zSinceFlap = 0; zSinceMega = 0; }
         if (m == M_RUN) goRight(startX + W * 0.28f, startY, 1.1f + rnd(), startX + W * 0.7f);
         else { genMode = 0; genX = startX; lastPlatX = startX; genY = startY - (48 + rnd() * 18); segLeft = 6 + rand() % 4; }
     }
@@ -300,7 +406,7 @@ static void gameOver(void) {
     saveWrite(); screen = S_JUMP_OVER;
 }
 static void hop(void) { playAdpcm(js_hop, JS_HOP_LEN, 12000, 70); }
-static void resumeRight(void) { goRight(p.x + 20, p.y + p.h * 0.5f, 0.9f + rnd() * 0.8f, p.x + 20 + W * 0.7f); lastPlatX = p.x; }
+static void resumeRight(void) { if (jMode == M_COMBO) return; goRight(p.x + 20, p.y + p.h * 0.5f, 0.9f + rnd() * 0.8f, p.x + 20 + W * 0.7f); lastPlatX = p.x; }
 
 // ── one step of the website's updatePlatformer ─────────────────────────────
 static void step(void) {
@@ -387,7 +493,7 @@ static void step(void) {
           if (p.y < flappyCeilY + p.h * 0.5f) { p.y = flappyCeilY + p.h * 0.5f; if (p.vy < 0) p.vy = 0; }   // bump the top, don't die
           if (p.y > flappyFloorY) { zoomT = baseZoom(); gameOver(); return; } }
     }
-    if (state == ST_PLAY && !flappy && !flappyFreeze && !flight && !bouncing && p.onGround) {   // never a dead end ahead
+    if (state == ST_PLAY && jMode != M_COMBO && !flappy && !flappyFreeze && !flight && !bouncing && p.onGround) {   // never a dead end ahead (COMBO's zones are always joined up)
         float pb = p.y + p.h * 0.5f; int ahead = 0;
         for (int i = 0; i < nPl; i++) { Plat *q = &pl[i]; if (q->x + q->w > p.x + p.w && q->x < p.x + W * 1.05f && q->y - pb > -H * 0.5f && q->y - pb < H * 1.1f) { ahead = 1; break; } }
         if (!ahead) { Plat *q = addPlat(p.x + W * 0.6f, pb, W * 0.5f); if (q) q->ground = 1;
@@ -396,6 +502,17 @@ static void step(void) {
     if (!flappy && !flappyFreeze) { float pit = (flight || bouncing) ? H * 1.7f : H * 1.0f; if (p.y - lastGroundY > pit) { flight = 0; zoomT = baseZoom(); gameOver(); } }
 }
 void updateJump(void) {
+#ifdef SIMDEBUG
+    if (jMode == M_COMBO && state == ST_PLAY && frame == 5) {      // dump the course: build 14 zones ahead and write them out
+        for (int k = 0; k < 14; k++) comboZone();
+        FILE *f = fopen("/tmp/course.txt", "w");
+        for (int i = 0; i < nPl; i++) fprintf(f, "P %f %f %f %d %d\n", pl[i].x, pl[i].y, pl[i].w, pl[i].chair, pl[i].flappy);
+        for (int i = 0; i < nOb; i++) fprintf(f, "O %f %f\n", ob[i].x, ob[i].y);
+        for (int i = 0; i < nPi; i++) fprintf(f, "I %f %f %f %f\n", pi[i].x, pi[i].w, pi[i].gapY, pi[i].gapH);
+        if (mega.on) fprintf(f, "M %f %f\n", mega.x, mega.y);
+        fclose(f);
+    }
+#endif
     if (state != ST_PLAY) return;
     step();
     if (state == ST_PLAY && (++speedAcc & 1)) step();   // 3 steps every 2 frames: quicker than the website's 1.14x, to suit the DS
