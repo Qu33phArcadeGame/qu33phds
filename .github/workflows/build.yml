@@ -32,10 +32,11 @@ jobs:
             echo "mini.pak and ball.pak are missing: upload them into the source folder"; exit 1
           fi
           printf '%s\n' \
-            'NAME          := qu33ph' \
+            ''NAME          := qu33ph' \
             'GAME_TITLE    := Qu33ph DS' \
-            'GAME_SUBTITLE := Flick markers' \
+            'GAME_SUBTITLE := The original marker throwing game' \
             'GAME_AUTHOR   := Qu33ph' \
+            'GAME_ICON     := icon.bmp' \
             'SOURCEDIRS    := source' \
             'NITROFSDIR    := nitrofs' \
             "include $RULES" > Makefile
