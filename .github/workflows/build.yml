@@ -31,12 +31,14 @@ jobs:
           if [ ! -f nitrofs/mini.pak ] || [ ! -f nitrofs/ball.pak ]; then
             echo "mini.pak and ball.pak are missing: upload them into the source folder"; exit 1
           fi
+          ICONLINE=""
+          if [ -f icon.bmp ]; then ICONLINE="GAME_ICON     := icon.bmp"; else echo "no icon.bmp at the top of the repo: building with the default icon"; fi
           printf '%s\n' \
-            ''NAME          := qu33ph' \
+            'NAME          := qu33ph' \
             'GAME_TITLE    := Qu33ph DS' \
             'GAME_SUBTITLE := The original marker throwing game' \
             'GAME_AUTHOR   := Qu33ph' \
-            'GAME_ICON     := icon.bmp' \
+            "$ICONLINE" \
             'SOURCEDIRS    := source' \
             'NITROFSDIR    := nitrofs' \
             "include $RULES" > Makefile
