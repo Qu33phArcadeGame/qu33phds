@@ -326,7 +326,7 @@ static void zFlap(void) {
     pad(zX, zY, W * 0.4f);
     float chx = zX + W * 0.4f; Plat *q = addPlat(chx, zY + 6, W * 0.26f); if (q) { q->chair = 1; q->flappy = 1; }
     float bandY = zY - H * 0.34f; flappyFloorY = bandY + H * 0.62f; flappyCeilY = bandY - H * 0.66f;
-    int n = 5 + rand() % 3; float gap = W * 0.52f, gapH = H * 0.47f, pw = W * 0.26f, x = chx + W * 0.85f, cy = bandY, lastX = x;
+    int n = 3 + rand() % 3; float gap = W * 0.48f, gapH = H * 0.47f, pw = W * 0.26f, x = chx + W * 0.8f, cy = bandY, lastX = x;
     for (int i = 0; i < n && nPi < NPI; i++) {
         cy += (rnd() - 0.5f) * H * 0.4f; if (cy < bandY - H * 0.28f) cy = bandY - H * 0.28f; if (cy > bandY + H * 0.28f) cy = bandY + H * 0.28f;
         pi[nPi++] = (Pipe){ x, pw, cy, gapH, 0, (u8)(i % 3) }; addCoin(x + pw * 0.5f, cy); lastX = x; x += gap;
@@ -364,7 +364,11 @@ static void genPath(void) {
     if (flapEndless) { flapSpawnAhead(); if ((frame & 7) == 0) cull(); return; }
     float za = 1 / (zoom < 0.4f ? 0.4f : zoom);
     if (jMode == M_COMBO) {                           // COMBO: build whole zones ahead of you
-        for (int g = 0; g < 4 && zX < camX + W * 2.7f * za; g++) { if (nPl >= NPL - 40) { cull(); if (nPl >= NPL - 40) break; } comboZone(); }
+        // inside a flap zone the corridor and its landing are already built: build and tidy
+        // nothing until you land (that work, every frame at the zoomed-out view, was the lag)
+        if (flappy || flappyFreeze) { if ((frame & 31) == 0) cull(); return; }
+        float zb = 1 / baseZoom();                      // look ahead by the normal view, not the zoomed-out one
+        if (zX < camX + W * 2.7f * zb) { if (nPl >= NPL - 40) cull(); if (nPl < NPL - 40) comboZone(); }   // at most one zone a frame
         if ((frame & 7) == 0) cull();
         return;
     }
