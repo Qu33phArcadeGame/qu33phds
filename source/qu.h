@@ -5,6 +5,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include "assets.h"
+// Hot pixel loops run in the ARM9's fast internal memory (ITCM: no waiting on main RAM) and in
+// full 32-bit ARM code rather than the default compact Thumb code: both are a big speed-up on a
+// real DS. (Defined by libnds; empty on other builds.)
+#ifndef ITCM_CODE
+#define ITCM_CODE
+#endif
+#ifndef ARM_CODE
+#define ARM_CODE
+#endif
+#define FAST ARM_CODE ITCM_CODE
 
 #define SW 256
 #define SH 192

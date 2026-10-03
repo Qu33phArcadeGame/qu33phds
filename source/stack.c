@@ -120,7 +120,7 @@ static void applyP(Body *b1, Body *b2, V2 r1, V2 r2, V2 P) {
     b2->v = vadd(b2->v, vmul(P, b2->invM)); b2->w += b2->invI * crossVV(r2, P);
 }
 static float physGrav = GRAV;
-static void step(float dt) {
+FAST static void step(float dt) {
     // broad phase: only pairs with a loose body, whose boxes come near each other
     memcpy(arbsOld, arbs, sizeof(Arb) * nArb); nArbOld = nArb; nArb = 0;
     for (int i = 0; i < nB; i++) { Body *a = &B[i]; if (!a->used) continue;
@@ -310,7 +310,7 @@ void inputStack(void) {
 }
 
 // ── drawing ───────────────────────────────────────────────────────────────
-static void drawBg(void) {
+FAST static void drawBg(void) {
     // the window tile, scrolling at the website's slow parallax (0.16 of the camera)
     const u8 *img = stBgImg(); int H = ST_WIN_H;
     int off = ((int)(camY * 0.16f) % H + H) % H;

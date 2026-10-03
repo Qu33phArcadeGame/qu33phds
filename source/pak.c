@@ -25,7 +25,13 @@ int pakUse(const char *name, u32 size, u32 id) {
 #ifdef PAK_TEST_DIR
     fsState = 1; sprintf(path, "%s/%s", PAK_TEST_DIR, name); f = fopen(path, "rb");
 #else
-    if (fsState == 0) fsState = nitroFSInit(NULL) ? 1 : -1;
+    if (fsState == 0) {
+        // normally the loader tells the game where its .nds is; if it doesn't (booted as the
+        // DSpico's _picoboot.nds, or straight from a cart menu), try where it's likely to be
+        static const char *ROMS[] = { 0, "fat:/_picoboot.nds", "sd:/_picoboot.nds", "fat:/qu33ph.nds", "sd:/qu33ph.nds", "fat:/NDS/qu33ph.nds", "sd:/NDS/qu33ph.nds" };
+        fsState = -1;
+        for (int i = 0; i < 7 && fsState < 0; i++) if (nitroFSInit(ROMS[i])) fsState = 1;
+    }
     if (fsState > 0) { sprintf(path, "nitro:/%s", name); f = fopen(path, "rb"); }
     static const char *SD[] = { "sd:/qu33ph/%s", "fat:/qu33ph/%s", "sd:/%s", "fat:/%s", "sd:/NDS/%s", "fat:/NDS/%s" };
     for (int i = 0; !f && i < 6; i++) { sprintf(path, SD[i], name); f = fopen(path, "rb"); }

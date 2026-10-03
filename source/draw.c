@@ -37,7 +37,7 @@ void grect(int x, int gy, int w, int h, u16 c) {
         u16 *r = growp(y); for (int i = x0; i < x1; i++) r[i] = c; }
 }
 // the whole tall canvas from a 256-colour picture (arcade tables): 2 pixels per store
-void drawIndexed(const u8 *idx, const u16 *pal) {
+FAST void drawIndexed(const u8 *idx, const u16 *pal) {
     u32 *d = (u32 *)bufTop; const u32 *s = (const u32 *)idx;
     for (int half = 0; half < 2; half++, d = (u32 *)bufBot)
         for (int i = 0; i < SW * SH / 4; i++) {
@@ -52,7 +52,7 @@ void drawIndexed(const u8 *idx, const u16 *pal) {
 // straight into the row instead of through gpx().
 u16 gSil;                                    // draw a sprite's silhouette in one colour (outlines, glows)
 int gStip;                                   // see-through: skip every other pixel (a cheap 50% fade)
-static void blitCore(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale) {
+FAST static void blitCore(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale) {
     if (scale <= 0.01f) return;
     float inv = 1.0f / scale;
     int ci = (int)(fcos(ang) * inv * 65536.0f), si = (int)(fsin(ang) * inv * 65536.0f);
@@ -96,7 +96,7 @@ void blit(u16 *buf, const u16 *spr, int w, int h, int x, int y) {
         const u16 *s = &spr[j * w]; u16 *d = &buf[yy * SW + x];
         for (int i = i0; i < i1; i++) { u16 p = s[i]; if (p & 0x8000) d[i] = p; } }
 }
-static void hfill(u16 *row, int x0, int x1, u16 c) {          // [x0, x1) already clipped
+FAST static void hfill(u16 *row, int x0, int x1, u16 c) {          // [x0, x1) already clipped
     if (x0 >= x1) return;
     if (x0 & 1) row[x0++] = c;
     u32 cc = c | ((u32)c << 16), *d = (u32 *)&row[x0]; int n = (x1 - x0) >> 1;
@@ -110,7 +110,7 @@ void rect(u16 *buf, int x, int y, int w, int h, u16 c) {
 }
 static u16 themeBgImg[2][SW * SH] __attribute__((aligned(32)));   // this theme's menu backgrounds (top, bottom)
 static int themeBgOK;
-void fillScreen(u16 *buf, u16 c) {
+FAST void fillScreen(u16 *buf, u16 c) {
     if (c == DARK && themeBgOK) { memcpy(buf, buf == bufTop ? themeBgImg[0] : themeBgImg[1], SW * SH * 2); return; }
     u32 cc = c | ((u32)c << 16), *d = (u32 *)buf;
     for (int i = 0; i < SW * SH / 16; i++) { d[0] = cc; d[1] = cc; d[2] = cc; d[3] = cc; d[4] = cc; d[5] = cc; d[6] = cc; d[7] = cc; d += 8; }
@@ -141,7 +141,7 @@ int textW(const char *t, int sc) { int w = 0; for (; *t; t++) { int ch = *t; if 
 // One pass per glyph row: the outline is the row's pixels spread one step left/right plus the
 // rows above and below, minus the letter itself, and only set bits are visited. (It used to be
 // five full passes over every bit of every row — the single biggest cost on menu screens.)
-static void glyphs(u16 *buf, int gyMode, int x, int y, const char *t, u16 col, int sc) {
+FAST static void glyphs(u16 *buf, int gyMode, int x, int y, const char *t, u16 col, int sc) {
     for (; *t; t++) {
         int ch = *t; if (ch < 32 || ch > 126) ch = '?';
         const u16 *rows = &font_rows[(ch - 32) * FONT_H];
@@ -508,7 +508,7 @@ static const u16 MK_COLS[3] = { COL(31, 7, 7), COL(7, 29, 9), COL(9, 14, 31) };
 // every pass re-rotated the sprite: up to 17 full rotations per marker per frame in NEON.
 #define FXMAX 96
 static u16 fxBuf[FXMAX * FXMAX];
-static int rotToScratch(const u16 *spr, int w, int h, float ang, float scale) {
+FAST static int rotToScratch(const u16 *spr, int w, int h, float ang, float scale) {
     float inv = 1.0f / scale;
     int ci = (int)(fcos(ang) * inv * 65536.0f), si = (int)(fsin(ang) * inv * 65536.0f);
     int r = (int)(fsqrt((float)(w * w + h * h)) * scale / 2) + 1; if (r > FXMAX / 2 - 1) return -1;
@@ -523,7 +523,7 @@ static int rotToScratch(const u16 *spr, int w, int h, float ang, float scale) {
     }
     return r;
 }
-static void stamp(int cx, int cy, int r, u16 col, int stip) {     // col 0 = the picture itself
+FAST static void stamp(int cx, int cy, int r, u16 col, int stip) {     // col 0 = the picture itself
     int n = 2 * r + 1;
     for (int j = 0; j < n; j++) { int gy = cy - r + j; if (gy < gClipLo || gy >= gClipHi) continue;
         u16 *row = growp(gy); const u16 *s = &fxBuf[j * n];
@@ -566,7 +566,7 @@ void blitGlow(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 glow) {
 }
 
 // a small picture scaled with no rotation (coins): integer stepping straight into the rows
-void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh) {
+FAST void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh) {
     if (dw < 1 || dh < 1) return;
     int sx0 = (w << 16) / dw, sy0 = (h << 16) / dh, x0 = cx - dw / 2, y0 = cy - dh / 2;
     for (int j = 0; j < dh; j++) { int gy = y0 + j; if (gy < gClipLo || gy >= gClipHi) continue;
@@ -575,7 +575,7 @@ void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh) {
 }
 
 // a 256-wide indexed picture drawn into g-space from row gy0, skipping index 255 (see-through)
-void drawIndexedMasked(const u8 *img, const u16 *pal, int rows, int gy0) {
+FAST void drawIndexedMasked(const u8 *img, const u16 *pal, int rows, int gy0) {
     for (int j = 0; j < rows; j++) { int gy = gy0 + j; if (gy < 0 || gy >= 2 * SH) continue;
         u16 *row = growp(gy); const u8 *s = &img[j * SW];
         for (int x = 0; x < SW; x++) { u8 k = s[x]; if (k != 255) row[x] = pal[k]; } }

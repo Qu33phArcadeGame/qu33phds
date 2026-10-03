@@ -34,6 +34,7 @@ static struct { float x, y, vx, vy, w, h; int onGround, face; } p;
 enum { M_COMBO, M_JUMP, M_RUN, M_FLAP };
 static const char *MODE_NAME[4] = { "COMBO", "JUMP", "RUN", "FLAP" };
 static const char *MODE_BLURB[4] = { "the full mix: climb, run, bounce & flap", "climb forever: dodge markers, ride platforms", "endless runner: dash & leap the markers", "pure flappy: thread the pipes forever" };
+static int lastFlap;
 static int jMode, state, score, frame, coinsWon, newBest, menuSel, overSel, upStart, cycles, lastLaunch, megaFlash, bounceCombo, bounceFlash, flappyPassed, flappyHint;
 static int flight, bouncing, flappy, flappyFreeze, flapEndless, stairDir, stairLeft, flapPipeN, moveDir, jumpQ, speedAcc;
 static float camX, camY, zoom, zoomT, genX, genY, segLeft, lastPlatX, noMarkerUntilX, startX, startY, bestX, bestUp, lastGroundY, progress, flappyFloorY, flappyCeilY, flappyEndX, flapLastX, flapBandY;
@@ -222,7 +223,7 @@ static void genStep(void) {
                 else { genY += (rnd() - 0.5f) * 44; genMode = 1; lastPlatX = genX; segLeft = W * (1.1f + rnd()); }
             } else {
                 float roll = rnd();
-                if (progress > 26 && roll < 0.12f) flappyRun(genX, genY);
+                if ((progress > 14 && cycles - lastFlap >= 3) || (progress > 26 && roll < 0.12f)) { flappyRun(genX, genY); lastFlap = cycles; }   // COMBO: a flappy run at least every third section
                 else if (progress > 22 && roll < 0.28f && cycles - lastLaunch >= 2) bounceChain(genX, genY);
                 else if (progress > 20 && roll < 0.42f) zigzag(genX, genY);
                 else if (progress > 18 && roll < 0.56f) gauntlet(genX, genY);
@@ -265,7 +266,7 @@ static void startRun(int m) {
     memset(&p, 0, sizeof p); p.x = startX; p.y = startY - 15; p.w = 20; p.h = 30; p.onGround = 1; p.face = 1;
     bestX = startX; bestUp = startY - 15; lastGroundY = startY - 15;
     runnersInit(); airUsed = 0;
-    mega.on = 0; flight = bouncing = flappy = flappyFreeze = flapEndless = 0; zoom = zoomT = baseZoom(); cycles = 0; lastLaunch = -99;
+    mega.on = 0; flight = bouncing = flappy = flappyFreeze = flapEndless = 0; zoom = zoomT = baseZoom(); cycles = 0; lastLaunch = -99; lastFlap = 0;
     megaFlash = bounceCombo = bounceFlash = flappyPassed = flappyHint = 0; noMarkerUntilX = 0; upStart = 8; flapPipeN = 0;
     camX = p.x - W * 0.4f; camY = p.y - H * 0.55f;
     for (int d = 0; d < 44; d++) { deco[d][0] = rnd(); deco[d][1] = rnd(); deco[d][2] = 0.3f + rnd() * 0.7f; deco[d][3] = 0.6f + rnd() * 1.6f; }
@@ -402,7 +403,7 @@ void inputJump(void) {
 // ── drawing ───────────────────────────────────────────────────────────────
 static float SXf(float x) { return (x - camX - W / 2) * zoom + W / 2; }
 static float SYf(float y) { return (y - camY - H / 2) * zoom + H / 2; }
-static void sky(void) {
+FAST static void sky(void) {
     int t = sv.theme;
     u16 top = t == 1 ? COL(27, 27, 25) : t == 4 ? COL(0, 1, 1) : t == 2 ? COL(4, 2, 9) : (t == 3 || t == 5) ? COL(14, 8, 2) : COL(3, 4, 11);
     u16 bot = t == 1 ? COL(22, 22, 20) : t == 4 ? COL(1, 4, 3) : t == 2 ? COL(9, 4, 16) : (t == 3 || t == 5) ? COL(26, 15, 4) : COL(9, 7, 20);

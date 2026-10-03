@@ -281,7 +281,7 @@ void inputFlip(void) {
 // ── drawing ───────────────────────────────────────────────────────────────
 static float SX(float w) { return (w - camX) * Z; }
 static float SY(float w) { return AY + (w - AY) * Z; }
-static void drawBg(void) {
+FAST static void drawBg(void) {
     const u8 *img = winImg(); int TW = FL_WIN_W;
     int ox = ((int)(camX * 0.10f) % TW + TW) % TW;          // the website's 0.10 parallax
     for (int gy = 0; gy < 2 * SH; gy++) {

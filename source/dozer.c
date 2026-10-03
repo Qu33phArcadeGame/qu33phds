@@ -96,7 +96,7 @@ static void closest(Item *a, Item *b, int *ax, int *ay, int *bx, int *by) {
 }
 static int uExt(Item *a) { return a->h ? (a->ex < 0 ? -a->ex : a->ex) + a->rad : a->rad; }
 static int backV(Item *a) { int y1 = a->v - a->ey, y2 = a->v + a->ey; return (y1 < y2 ? y1 : y2) - a->rad; }
-static void separate(void) {
+FAST static void separate(void) {
     for (int i = 0; i < nI; i++) {
         Item *a = &it[i];
         for (int j = i + 1; j < nI; j++) {
@@ -317,7 +317,7 @@ void drawDozer(void) {
     static u8 ord[MAXI]; for (int i = 0; i < nI; i++) ord[i] = i;
     for (int i = 1; i < nI; i++) { u8 k = ord[i]; int j = i - 1; while (j >= 0 && it[ord[j]].v > it[k].v) { ord[j + 1] = ord[j]; j--; } ord[j + 1] = k; }
     for (int n = 0; n < nI; n++) { Item *a = &it[ord[n]]; int x, y, sc; bedXYi(a->u, a->v, &x, &y, &sc);
-        y -= fmul(fmul(a->shelf ? FX : a->drop, sc), F(384 * 0.020));
+        y -= fmul(fmul(a->shelf ? FX : a->drop, sc), F(384 * 0.020)) >> 16;   // (lift, in pixels: was left in 16.16, so lifted pieces flew off-screen)
         if (a->coin) { int rad = (fmul(sc, F(0.050 * 76.8 * 0.95)) + FX / 2) >> 16;
             u16 *row = (y + rad / 2 >= 0 && y + rad / 2 < 2 * SH) ? gRow(y + rad / 2) : 0;
             if (row) for (int i = -rad; i <= rad; i++) { int xx = x + i; if ((unsigned)xx < SW) row[xx] = ((row[xx] >> 1) & 0x3DEF) | 0x8000; }
