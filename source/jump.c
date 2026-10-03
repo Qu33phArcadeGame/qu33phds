@@ -431,9 +431,17 @@ void drawJump(void) {
     for (int i = 0; i < nPi; i++) {                     // flappy pipes: stacked markers above and below the gap
         Pipe *q = &pi[i]; int w; const u16 *sp = mkSpr(q->col, &w); float hg = q->gapH * 0.5f, x = SXf(q->x + q->w / 2), sc = q->w * zoom / w;
         if (x < -40 || x > SW + 40) continue;
-        float seg = JM_0_H * sc;
-        for (float y = SYf(q->gapY - hg) - seg / 2; y > -seg; y -= seg) drawMarkerFx(sp, w, JM_0_H, (int)x, (int)y, 0, sc, q->col);
-        for (float y = SYf(q->gapY + hg) + seg / 2; y < 2 * SH + seg; y += seg) drawMarkerFx(sp, w, JM_0_H, (int)x, (int)y, 0, sc, q->col);
+        // pipes are upright, so they're drawn with the quick straight scaler (no rotation): each
+        // segment costs only the pixels it covers. (Rotating them, with the theme's glow passes,
+        // was most of FLAP's frame time.)
+        int dw = (int)(w * sc + 0.5f), dh = (int)(JM_0_H * sc + 0.5f); if (dh < 1) dh = 1;
+        for (int y = (int)SYf(q->gapY - hg) - dh / 2; y > -dh; y -= dh) blitScaled(sp, w, JM_0_H, (int)x, y, dw, dh);
+        for (int y = (int)SYf(q->gapY + hg) + dh / 2; y < 2 * SH + dh; y += dh) blitScaled(sp, w, JM_0_H, (int)x, y, dw, dh);
+        if (sv.theme == 1 || sv.theme == 4) {           // CARTOON / NEON: a crisp edge line instead of the per-pixel outline
+            u16 e = sv.theme == 1 ? BLACK : COL(8, 31, 15); int x0 = (int)x - dw / 2 - 1, x1 = (int)x + dw / 2;
+            grect(x0, 0, 1, (int)SYf(q->gapY - hg), e); grect(x1, 0, 1, (int)SYf(q->gapY - hg), e);
+            grect(x0, (int)SYf(q->gapY + hg), 1, 2 * SH, e); grect(x1, (int)SYf(q->gapY + hg), 1, 2 * SH, e);
+        }
         u16 g = q->col == 0 ? COL(31, 6, 8) : q->col == 1 ? COL(6, 31, 14) : COL(7, 15, 31);
         grect((int)(x - q->w * zoom / 2) - 3, (int)SYf(q->gapY - hg) - 6, (int)(q->w * zoom) + 6, 6, g);
         grect((int)(x - q->w * zoom / 2) - 3, (int)SYf(q->gapY + hg), (int)(q->w * zoom) + 6, 6, g);
