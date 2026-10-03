@@ -321,7 +321,7 @@ static void step(void) {
 void updateJump(void) {
     if (state != ST_PLAY) return;
     step();
-    if (state == ST_PLAY && ++speedAcc >= 7) { speedAcc = 0; step(); }   // the website runs at 1.14x: 8 steps every 7 frames
+    if (state == ST_PLAY && (++speedAcc & 1)) step();   // 3 steps every 2 frames: quicker than the website's 1.14x, to suit the DS
 }
 
 // ── input ─────────────────────────────────────────────────────────────────
@@ -378,7 +378,7 @@ void drawJump(void) {
     for (int i = 0; i < nPl; i++) { Plat *q = &pl[i];
         if (q->chair) { float x = SXf(q->x + q->w / 2), y = SYf(q->y); float hh = 34 * zoom; blitRotScale(chair, CHAIR_W, CHAIR_H, (int)x, (int)(y - hh / 2), 0, hh / CHAIR_H); }
         else slab(q); }
-    for (int i = 0; i < nCo; i++) if (!co[i].got) { int x = (int)SXf(co[i].x), y = (int)SYf(co[i].y); if (x > -10 && x < SW + 10 && y > -10 && y < 2 * SH + 10) blitRotScale(coinT, COIN_W, COIN_H, x, y, 0, 0.8f * zoom / 0.8f); }
+    for (int i = 0; i < nCo; i++) if (!co[i].got) { int x = (int)SXf(co[i].x), y = (int)SYf(co[i].y); if (x > -10 && x < SW + 10 && y > -10 && y < 2 * SH + 10) { int d = (int)(COIN_W * zoom * 0.8f + 0.5f); blitScaled(coinT, COIN_W, COIN_H, x, y, d, d); } }
     for (int i = 0; i < nOb; i++) { Obs *o = &ob[i]; int w; const u16 *sp = mkSpr(o->col, &w); float hgt = o->h * 1.15f * zoom;
         int x = (int)SXf(o->x), y = (int)(SYf(o->y) - hgt / 2); if (x < -20 || x > SW + 20) continue;
         drawMarkerFx(sp, w, JM_0_H, x, y, o->roll, hgt / JM_0_H, o->col); }

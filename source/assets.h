@@ -88,6 +88,9 @@ extern const u16 pmc_blue[456];
 extern const u16 fonts_rows[950];
 #define FONTS_H 10
 extern const unsigned char fonts_w[95];
+extern const u16 arc_icons[22176];
+#define ARCIC_W 44
+#define ARCIC_H 56
 extern const u8 snd_vertical1[18268];
 #define SND_VERTICAL1_LEN 18268
 #define SND_VERTICAL1_RATE 16000

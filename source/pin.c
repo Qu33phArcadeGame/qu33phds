@@ -95,7 +95,12 @@ static void triCollide(void) {
         b.vy += 0.004f; return;
     }
 }
-void updatePin(void) {
+static void pinStep(void);
+static int pinAcc;
+void updatePin(void) {                                 // 4 physics steps every 3 frames: a livelier table
+    pinStep(); if (state == ST_PLAY && ++pinAcc >= 3) { pinAcc = 0; pinStep(); }
+}
+static void pinStep(void) {
     fl += (tl - fl) * 0.5f; fr += (tr - fr) * 0.5f;
     if (msgT > 0 && msgT < 900) msgT--;
     if (megaFlash > 0) megaFlash--;

@@ -192,6 +192,7 @@ void coinCount(u16 *buf, int x, int y) {
 // recoloured by the same themeTint the website-style filters are modelled on.
 u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18), uiIcon = COL(19, 19, 20);
 u16 logoT[LOGO_W * LOGO_H];
+u16 arcIcT[9][ARCIC_W * ARCIC_H];
 u16 pmT[3][PM_BLUE_W * PM_BLUE_H > PM_RED_W * PM_RED_H ? PM_BLUE_W * PM_BLUE_H : PM_RED_W * PM_RED_H];
 u16 coinT[COIN_W * COIN_H], icCoinBigT[IC_COINBIG_W * IC_COINBIG_H], slotSymT[7][SLOT_LOGO_W * SLOT_LOGO_H];
 u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
@@ -293,6 +294,7 @@ void themeUI(int t) {
       if (t == 4) for (int k = 0; k < 7; k++) for (int i = 0; i < SLOT_LOGO_W * SLOT_LOGO_H; i++) {
           u16 c = slotSymT[k][i]; int lum = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31);
           if (lum > 12) slotSymT[k][i] = bright(bright(c)); } }
+    for (int k = 0; k < 9; k++) { const u16 *src = &arc_icons[k * ARCIC_W * ARCIC_H]; CTINT(arcIcT[k], src, ARCIC_W * ARCIC_H) }   // the arcade's cabinets
     #undef CTINT
     #undef TINT
     uiDotRed = t <= 0 ? COL(31, 10, 10) : themeTint(COL(31, 10, 10), t);
@@ -499,23 +501,50 @@ void blitInk(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 ink) {
 // round it. col: 0 red, 1 green, 2 blue (-1 = no colour of its own).
 int gGlowShop;
 static const u16 MK_COLS[3] = { COL(31, 7, 7), COL(7, 29, 9), COL(9, 14, 31) };
+// The marker is rotated ONCE into a small scratch picture; the outline / glow passes then just
+// stamp that picture's shape at a few offsets (whole-number copies, no rotation maths). Before,
+// every pass re-rotated the sprite: up to 17 full rotations per marker per frame in NEON.
+#define FXMAX 96
+static u16 fxBuf[FXMAX * FXMAX];
+static int rotToScratch(const u16 *spr, int w, int h, float ang, float scale) {
+    float inv = 1.0f / scale;
+    int ci = (int)(fcos(ang) * inv * 65536.0f), si = (int)(fsin(ang) * inv * 65536.0f);
+    int r = (int)(fsqrt((float)(w * w + h * h)) * scale / 2) + 1; if (r > FXMAX / 2 - 1) return -1;
+    int n = 2 * r + 1;
+    for (int dy = -r; dy <= r; dy++) {
+        int sxf = ci * (-r) + si * dy + (w << 15), syf = -si * (-r) + ci * dy + (h << 15);
+        u16 *row = &fxBuf[(dy + r) * n];
+        for (int dx = -r; dx <= r; dx++, sxf += ci, syf -= si) {
+            int ix = sxf >> 16, iy = syf >> 16;
+            row[dx + r] = ((unsigned)ix < (unsigned)w && (unsigned)iy < (unsigned)h) ? spr[iy * w + ix] : 0;
+        }
+    }
+    return r;
+}
+static void stamp(int cx, int cy, int r, u16 col, int stip) {     // col 0 = the picture itself
+    int n = 2 * r + 1;
+    for (int j = 0; j < n; j++) { int gy = cy - r + j; if (gy < gClipLo || gy >= gClipHi) continue;
+        u16 *row = growp(gy); const u16 *s = &fxBuf[j * n];
+        for (int i = 0; i < n; i++) { u16 p = s[i]; if (!(p & 0x8000)) continue; int x = cx - r + i;
+            if ((unsigned)x >= SW || (stip && ((x ^ gy) & 1))) continue; row[x] = col ? col : p; } }
+}
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col) {
-    int neon = sv.theme == 4, cart = sv.theme == 1, st = gStip;
+    int neon = sv.theme == 4, cart = sv.theme == 1 && col >= 0;
+    if (!neon && !gGlowShop && !cart) { blitCore(spr, w, h, cx, cy, ang, scale); return; }   // plain: one pass, as before
+    if (scale <= 0.01f) return;
+    int r = rotToScratch(spr, w, h, ang, scale);
+    if (r < 0) { blitCore(spr, w, h, cx, cy, ang, scale); return; }                          // (too big for the scratch: plain)
     if (neon || gGlowShop) {
-        u16 g = neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20));
+        u16 g = neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20)), dim = mix(g, BLACK, 1, 2);
         static const signed char R3[12][2] = { {-3,0},{3,0},{0,-3},{0,3},{-2,-2},{2,-2},{-2,2},{2,2},{-3,-1},{3,1},{-1,3},{1,-3} };
-        gSil = mix(g, BLACK, 1, 2); gStip = 1;
-        for (int k = 0; k < 12; k++) blitCore(spr, w, h, cx + R3[k][0], cy + R3[k][1], ang, scale);
-        gSil = g; gStip = 0;
-        for (int k = 0; k < 4; k++) blitCore(spr, w, h, cx + (k == 0) - (k == 1), cy + (k == 2) - (k == 3), ang, scale);
+        for (int k = 0; k < 12; k++) stamp(cx + R3[k][0], cy + R3[k][1], r, dim, 1);
+        for (int k = 0; k < 4; k++) stamp(cx + (k == 0) - (k == 1), cy + (k == 2) - (k == 3), r, g, 0);
     }
-    if (cart && col >= 0) {
+    if (cart) {
         static const signed char R2[8][2] = { {-2,0},{2,0},{0,-2},{0,2},{-1,-1},{1,-1},{-1,1},{1,1} };
-        gSil = MK_COLS[col]; gStip = 0;
-        for (int k = 0; k < 8; k++) blitCore(spr, w, h, cx + R2[k][0], cy + R2[k][1], ang, scale);
+        for (int k = 0; k < 8; k++) stamp(cx + R2[k][0], cy + R2[k][1], r, MK_COLS[col], 0);
     }
-    gSil = 0; gStip = st;
-    blitCore(spr, w, h, cx, cy, ang, scale);
+    stamp(cx, cy, r, 0, gStip);
 }
 
 // NEON glow round a picture: a soft wide halo (every other pixel) then a bright tight ring
@@ -532,4 +561,13 @@ void blitGlow(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 glow) {
         }
     }
     blit(buf, spr, w, h, x, y);
+}
+
+// a small picture scaled with no rotation (coins): integer stepping straight into the rows
+void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh) {
+    if (dw < 1 || dh < 1) return;
+    int sx0 = (w << 16) / dw, sy0 = (h << 16) / dh, x0 = cx - dw / 2, y0 = cy - dh / 2;
+    for (int j = 0; j < dh; j++) { int gy = y0 + j; if (gy < gClipLo || gy >= gClipHi) continue;
+        u16 *row = growp(gy); const u16 *s = &spr[((j * sy0) >> 16) * w]; int fx = 0;
+        for (int i = 0; i < dw; i++, fx += sx0) { int x = x0 + i; u16 p = s[fx >> 16]; if ((p & 0x8000) && (unsigned)x < SW) row[x] = p; } }
 }

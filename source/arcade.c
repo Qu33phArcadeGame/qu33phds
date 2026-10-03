@@ -19,14 +19,30 @@ static const int ARC_READY[ARC_COUNT] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 static const char *ARC_BLURB[ARC_COUNT] = { "four mini markers, three tables", "three machines, nine markers", "spinner air hockey, first to 3/5/7", "ten frames, marker pins", "drag & drop - build the tower", "flick from pad to pad - 33 levels", "coin pusher - push coins off the ledge", "climb, run, bounce & flap - 4 modes", "the ball is a marker - hit the MEGA" };
 static int arcErrT;                    // frames left to show "couldn't load" on the top screen
 static int arcSel;
-static Btn AB[ARC_COUNT + 1];
+// the website's arcade layout: five cabinets across, four centred below (its order), then BACK
+static const int SLOT_GAME[9] = { ARC_JUMP, ARC_PINBALL, ARC_BOWLING, ARC_STACK, ARC_FIDGET, ARC_FLIP, ARC_BALL, ARC_DOZER, ARC_MINI };
+static const char *CAB_LABEL[ARC_COUNT] = { "MINI", "BALL", "FIDGET", "BOWLING", "STACK", "FLIP", "DOZER", "JUMP", "PINBALL" };
+static Btn AB[10];
 static void arcLayout(void) {
-    int w = (SW - 12) / 2;
-    for (int i = 0; i <= ARC_COUNT; i++) {
-        AB[i].x = 4 + (i % 2) * (w + 4); AB[i].y = 4 + (i / 2) * 37; AB[i].w = w; AB[i].h = 33;
-        AB[i].col = 0; AB[i].dim = i < ARC_COUNT && !ARC_READY[i];
-        strcpy(AB[i].label, i < ARC_COUNT ? ARC_NAME[i] : "BACK");
+    for (int k = 0; k < 9; k++) {
+        int row = k < 5 ? 0 : 1, col = row ? k - 5 : k, n = row ? 4 : 5, x0 = (SW - (n * 48 + (n - 1) * 2)) / 2;
+        AB[k] = (Btn){ x0 + col * 50, 2 + row * 76, 48, 72, "", 0, 0 };
     }
+    AB[9] = (Btn){ 88, 156, 80, 30, "BACK", 0, 0 };
+}
+static void drawCab(int k, int on) {
+    int g = SLOT_GAME[k], x = AB[k].x + 2, y = AB[k].y + 2 - (on ? 2 : 0);
+    const u16 *ic = arcIcT[g];
+    if (on) {                                        // the chosen cabinet: a gold frame, lifted a touch
+        u16 fc = sv.theme == 1 ? COL(28, 4, 4) : GOLD;
+        rect(bufBot, AB[k].x, AB[k].y, AB[k].w, 2, fc); rect(bufBot, AB[k].x, AB[k].y + AB[k].h - 2, AB[k].w, 2, fc);
+        rect(bufBot, AB[k].x, AB[k].y, 2, AB[k].h, fc); rect(bufBot, AB[k].x + AB[k].w - 2, AB[k].y, 2, AB[k].h, fc);
+    }
+    // each theme's finish, as the website's arcade cards wear it: NEON glows, CARTOON is inked
+    if (sv.theme == 4) blitGlow(bufBot, ic, ARCIC_W, ARCIC_H, x, y, on ? COL(20, 31, 24) : COL(8, 31, 15));
+    else blitInk(bufBot, ic, ARCIC_W, ARCIC_H, x, y, uiInk);
+    const char *l = CAB_LABEL[g]; int lx = AB[k].x + (AB[k].w - textSW(l)) / 2, ly = AB[k].y + 60;
+    textS(bufBot, lx + 1, ly + 1, l, uiInk); textS(bufBot, lx, ly, l, on ? (sv.theme == 1 ? COL(28, 4, 4) : YELLOW) : uiIcon);
 }
 void drawArcade(void) {
     arcLayout();
@@ -34,13 +50,13 @@ void drawArcade(void) {
     if (sv.theme == 4) blitGlow(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0, COL(8, 31, 15)); else blit(bufTop, logoT, LOGO_W, LOGO_H, (SW - LOGO_W) / 2, 0);
     coinCount(bufTop, 8, 8);
     textC(bufTop, 118, "ARCADE", GOLD, 2);
-    if (arcSel < ARC_COUNT) {
-        textC(bufTop, 150, ARC_NAME[arcSel], WHITE, 1);
+    if (arcSel < 9) {
+        int g = SLOT_GAME[arcSel];
+        textC(bufTop, 150, ARC_NAME[g], WHITE, 1);
         char s[40];
-        if (!ARC_READY[arcSel]) strcpy(s, "coming soon to the DS");
-        else if (sv.arcadePlays[arcSel]) sprintf(s, "best %d   played %d", sv.arcadeBest[arcSel], sv.arcadePlays[arcSel]);
-        else strcpy(s, ARC_BLURB[arcSel]);
-        textC(bufTop, 170, s, ARC_READY[arcSel] ? YELLOW : GREY, 1);
+        if (sv.arcadePlays[g]) sprintf(s, "best %d   played %d", sv.arcadeBest[g], sv.arcadePlays[g]);
+        else strcpy(s, ARC_BLURB[g]);
+        textC(bufTop, 170, s, YELLOW, 1);
     }
     if (arcErrT > 0) {                  // a game's pack couldn't be loaded
         arcErrT--;
@@ -49,13 +65,31 @@ void drawArcade(void) {
         textC(bufTop, 162, pakErr == 3 ? "rebuild with the new .pak" : "rebuild, or .paks to SD/qu33ph", YELLOW, 1);
     }
     fillScreen(bufBot, DARK);
-    drawBtns(bufBot, AB, ARC_COUNT + 1, arcSel);
+    for (int k = 0; k < 9; k++) drawCab(k, k == arcSel);
+    drawBtns(bufBot, &AB[9], 1, arcSel == 9 ? 0 : -1);
+}
+// D-pad between the cabinets by where they sit (the second row is offset, like the website's)
+static int arcNav(int cur, int dx, int dy) {
+    int cx = AB[cur].x + AB[cur].w / 2, cy = AB[cur].y + AB[cur].h / 2, best = cur, bd = 1 << 30;
+    for (int i = 0; i < 10; i++) { if (i == cur) continue;
+        int x = AB[i].x + AB[i].w / 2 - cx, y = AB[i].y + AB[i].h / 2 - cy, along = dx ? x * dx : y * dy, across = dx ? (y < 0 ? -y : y) : (x < 0 ? -x : x);
+        if (along <= 0 || (dx && across > 30)) continue;
+        int d = along + across * 2; if (d < bd) { bd = d; best = i; } }
+    return best;
 }
 void inputArcade(void) {
     arcLayout();
     if (kDown & KEY_B) { goScreen(S_TITLE); return; }
-    int h = btnInput(AB, ARC_COUNT + 1, &arcSel, 2);
-    if (h == ARC_COUNT) { goScreen(S_TITLE); return; }
+    if (arcSel < 0 || arcSel > 9) arcSel = 0;
+    if (kDown & KEY_UP) arcSel = arcNav(arcSel, 0, -1);
+    if (kDown & KEY_DOWN) arcSel = arcNav(arcSel, 0, 1);
+    if (kDown & KEY_LEFT) arcSel = arcNav(arcSel, -1, 0);
+    if (kDown & KEY_RIGHT) arcSel = arcNav(arcSel, 1, 0);
+    int keep = kDown; kDown &= ~(KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT);
+    int s = arcSel, k = btnInput(AB, 10, &s, 1);
+    kDown = keep; arcSel = s;
+    if (k == 9) { goScreen(S_TITLE); return; }
+    int h = k >= 0 && k < 9 ? SLOT_GAME[k] : -1;
     if (h == ARC_MINI) { if (pakUse(MINI_PAK, MINI_PAK_SIZE, MINI_PAK_ID)) { miniThemeChanged(); goScreen(S_MINI_MENU); } else arcErrT = 240; }
     if (h == ARC_BALL) { if (ballEnter()) goScreen(S_BALL_MENU); else arcErrT = 240; }
     if (h == ARC_JUMP) { if (jumpEnter()) goScreen(S_JUMP_MENU); else arcErrT = 240; }
