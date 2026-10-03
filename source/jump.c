@@ -148,7 +148,17 @@ static void bounceChain(float chx, float gy0) {
     Plat *q = addPlat(chx - W * 0.18f, floorY, (sx - chx) + W * 0.95f); if (q) q->ground = 1;
     goRight(chx + (sx - chx) + W * 0.35f, floorY, 0.9f + rnd() * 0.8f, 0); noMarkerUntilX = genX + W * 0.5f; lastPlatX = genX - W * 0.2f;
 }
+static void clearBox(float x0, float x1, float y0, float y1) {     // remove earlier pieces from a region
+    int k = 0; for (int i = 0; i < nPl; i++) { Plat *q = &pl[i]; if (q->x + q->w > x0 && q->x < x1 && q->y > y0 && q->y < y1) continue; pl[k++] = *q; } nPl = k;
+    k = 0; for (int i = 0; i < nOb; i++) { if (ob[i].x > x0 && ob[i].x < x1 && ob[i].y > y0 && ob[i].y < y1) continue; ob[k++] = ob[i]; } nOb = k;
+    k = 0; for (int i = 0; i < nCo; i++) { if (co[i].x > x0 && co[i].x < x1 && co[i].y > y0 && co[i].y < y1) continue; co[k++] = co[i]; } nCo = k;
+}
 static void flappyRun(float chx, float gy0) {
+    {   // clear the whole flappy corridor first (keep the run-up to the chair), so nothing else is in the way
+        float bandY = gy0 - H * 0.34f, x0 = chx + W * 0.05f, x1 = chx + W * 0.85f + 8 * W * 0.52f + W * 0.5f;
+        clearBox(x0, x1, bandY - H * 0.9f, bandY + H * 0.9f);
+        clearBox(chx - W * 0.3f, chx + W * 0.3f, gy0 - H * 0.9f, gy0 - 10);     // and the air right above the chair
+    }
     Plat *q = addPlat(chx - W * 0.24f, gy0, W * 0.24f); if (q) q->ground = 1;
     q = addPlat(chx - 4, gy0 + 6, W * 0.26f > 40 ? W * 0.26f : 40); if (q) { q->chair = 1; q->flappy = 1; }
     float bandY = gy0 - H * 0.34f; flappyFloorY = bandY + H * 0.62f; flappyCeilY = bandY - H * 0.66f;
@@ -448,7 +458,8 @@ void drawJump(void) {
         grect((int)(x - q->w * zoom / 2) - 3, (int)SYf(q->gapY + hg), (int)(q->w * zoom) + 6, 6, g);
     }
     for (int i = 0; i < nPl; i++) { Plat *q = &pl[i];
-        if (q->chair) { float x = SXf(q->x + q->w / 2), y = SYf(q->y); float hh = 34 * zoom; blitRotScale(chair, CHAIR_W, CHAIR_H, (int)x, (int)(y - hh / 2), 0, hh / CHAIR_H); }
+        if (q->chair) { float x = SXf(q->x + q->w / 2), y = SYf(q->y); float hh = (q->flappy ? 78 : 34) * zoom;   // the flappy launch chair: big, so you can't miss it
+            blitRotScale(chair, CHAIR_W, CHAIR_H, (int)x, (int)(y - hh / 2), 0, hh / CHAIR_H); }
         else slab(q); }
     for (int i = 0; i < nCo; i++) if (!co[i].got) { int x = (int)SXf(co[i].x), y = (int)SYf(co[i].y); if (x > -10 && x < SW + 10 && y > -10 && y < 2 * SH + 10) { int d = (int)(COIN_W * zoom * 0.8f + 0.5f); blitScaled(coinT, COIN_W, COIN_H, x, y, d, d); } }
     for (int i = 0; i < nOb; i++) { Obs *o = &ob[i]; int w; const u16 *sp = mkSpr(o->col, &w); float hgt = o->h * 1.15f * zoom;

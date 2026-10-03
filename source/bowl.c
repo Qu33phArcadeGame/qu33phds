@@ -39,7 +39,7 @@
 #define CHAIR_R 0.135f
 #define MEGA_CHANCE 0.42f
 #define BASE_HOOK -0.085f
-#define DT (1.3f / 60.0f)                  // the website's real time, played 30% quicker on the DS
+#define DT (1.8f / 60.0f)                  // the website's real time, played 80% quicker on the DS
 static const float KK = NEAR_HW / FAR_HW - 1, S1 = FAR_HW / NEAR_HW;
 
 typedef struct { float X, Y, vx, vy, rot, vrot, sink; int col, down, gone; } Pin;
@@ -252,7 +252,7 @@ void updateBowl(void) {
         settleT += dt;
         int moving = 0;
         for (int i = 0; i < 10; i++) if (!pins[i].gone && fsqrt(pins[i].vx * pins[i].vx + pins[i].vy * pins[i].vy) > 0.14f) moving = 1;
-        if (!moving || settleT > 1.3f) endRoll(0);
+        if (!moving || settleT > 0.9f) endRoll(0);                // (a shorter wait for the pins to settle)
     }
 }
 
