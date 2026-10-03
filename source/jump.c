@@ -382,7 +382,10 @@ static void step(void) {
         for (int i = 0; i < nPi; i++) { Pipe *q = &pi[i]; float hg = q->gapH * 0.5f;
             if (p.x + 6 > q->x && p.x - 6 < q->x + q->w && (p.y - p.h * 0.35f < q->gapY - hg || p.y + p.h * 0.35f > q->gapY + hg)) { zoomT = baseZoom(); gameOver(); return; }
             if (!q->passed && p.x > q->x + q->w) { q->passed = 1; flappyPassed++; addCoins(2); coinsWon += 2; } }
-        if (p.y > flappyFloorY || p.y < flappyCeilY) { zoomT = baseZoom(); gameOver(); return; }
+        { float vh = (H * 0.5f) / zoom, top = camY + H * 0.5f - vh + 10, bot = camY + H * 0.5f + vh;
+          if (!flapEndless) { if (flappyCeilY < top) flappyCeilY = top; if (flappyFloorY > bot) flappyFloorY = bot; }
+          if (p.y < flappyCeilY + p.h * 0.5f) { p.y = flappyCeilY + p.h * 0.5f; if (p.vy < 0) p.vy = 0; }   // bump the top, don't die
+          if (p.y > flappyFloorY) { zoomT = baseZoom(); gameOver(); return; } }
     }
     if (state == ST_PLAY && !flappy && !flappyFreeze && !flight && !bouncing && p.onGround) {   // never a dead end ahead
         float pb = p.y + p.h * 0.5f; int ahead = 0;
@@ -434,7 +437,11 @@ static void slab(Plat *q) {                             // a platform: a marker 
     int c = ((int)fabsf_(q->x / 37 + q->y / 53)) % 3, w; const u16 *s = mkSpr(c, &w);
     float x0 = SXf(q->x), x1 = SXf(q->x + q->w), y = SYf(q->y) + 4 * zoom;
     if (x1 < -30 || x0 > SW + 30 || y < -20 || y > 2 * SH + 20) return;
-    drawMarkerFx(s, w, JM_0_H, (int)((x0 + x1) / 2), (int)y, 1.5707963f, (x1 - x0) / JM_0_H, c);
+    int len = (int)(x1 - x0), th = (int)(w * (x1 - x0) / JM_0_H + 0.5f); if (th < 2) th = 2;
+    blitScaledR90(s, w, JM_0_H, (int)((x0 + x1) / 2), (int)y, len, th);
+    if (sv.theme == 1 || sv.theme == 4) {              // CARTOON / NEON finish: crisp edge lines (cheap)
+        u16 e = sv.theme == 1 ? BLACK : COL(8, 31, 15); int yy = (int)y - th / 2;
+        grect((int)x0, yy - 1, len, 1, e); grect((int)x0, yy + th, len, 1, e); }
 }
 void drawJump(void) {
     char s[32];
@@ -464,7 +471,8 @@ void drawJump(void) {
     for (int i = 0; i < nCo; i++) if (!co[i].got) { int x = (int)SXf(co[i].x), y = (int)SYf(co[i].y); if (x > -10 && x < SW + 10 && y > -10 && y < 2 * SH + 10) { int d = (int)(COIN_W * zoom * 0.8f + 0.5f); blitScaled(coinT, COIN_W, COIN_H, x, y, d, d); } }
     for (int i = 0; i < nOb; i++) { Obs *o = &ob[i]; int w; const u16 *sp = mkSpr(o->col, &w); float hgt = o->h * 1.15f * zoom;
         int x = (int)SXf(o->x), y = (int)(SYf(o->y) - hgt / 2); if (x < -20 || x > SW + 20) continue;
-        drawMarkerFx(sp, w, JM_0_H, x, y, o->roll, hgt / JM_0_H, o->col); }
+        if (o->roll == 0 && sv.theme != 1 && sv.theme != 4) blitScaled(sp, w, JM_0_H, x, y, (int)(w * hgt / JM_0_H + 0.5f), (int)(hgt + 0.5f));   // standing still: no rotation needed
+        else drawMarkerFx(sp, w, JM_0_H, x, y, o->roll, hgt / JM_0_H, o->col); }
     if (mega.on && !mega.hit) { int x = (int)SXf(mega.x), y = (int)SYf(mega.y); blitRotScale(slotSymT[1], SLOT_LOGO_W, SLOT_LOGO_H, x, y, 0, mega.w * zoom / SLOT_LOGO_W); }
     if (JCHAR == 6) for (int i = 0; i < nFlock; i++) {    // H3MMINGWAY's flock, retracing her trail
         Chick *c = &flock[i]; float age = runDist - c->born, x, y; if (!trailAt(c->gap, &x, &y)) continue;
@@ -483,7 +491,8 @@ void drawJump(void) {
     {   // the runner (the website's art for whoever you picked)
         Runner *r = ch(); int pose = !p.onGround ? 2 : moveDir ? 1 : 0, L = p.face < 0;
         const u16 *sp = r->s[pose][L]; int w = r->w[pose][L];
-        float sc = zoom * 1.05f; blitRotScale(sp, w, r->h, (int)SXf(p.x), (int)(SYf(p.y + p.h * 0.5f) - r->h * sc / 2), 0, sc);
+        float sc = zoom * 1.05f; int dw = (int)(w * sc + 0.5f), dh = (int)(r->h * sc + 0.5f);
+        blitScaled(sp, w, r->h, (int)SXf(p.x), (int)(SYf(p.y + p.h * 0.5f) - dh / 2), dw, dh);   // upright: the quick scaler
     }
     sprintf(s, "%d", score); text(bufTop, 6, 4, s, WHITE, 2);
     sprintf(s, "%s  BEST %d", MODE_NAME[jMode], (int)JBEST(jMode)); text(bufTop, SW - 6 - textW(s, 1), 6, s, GOLD, 1);

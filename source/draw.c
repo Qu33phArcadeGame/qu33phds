@@ -580,3 +580,15 @@ FAST void drawIndexedMasked(const u8 *img, const u16 *pal, int rows, int gy0) {
         u16 *row = growp(gy); const u8 *s = &img[j * SW];
         for (int x = 0; x < SW; x++) { u8 k = s[x]; if (k != 255) row[x] = pal[k]; } }
 }
+
+// a sprite turned a quarter-turn and scaled, with no rotation maths: the sprite's height runs
+// along the screen's x. (Jump's platforms are markers lying flat: this draws only the pixels
+// they cover, where a general rotation scanned a big square round each one.)
+FAST void blitScaledR90(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh) {
+    if (dw < 1 || dh < 1) return;
+    int stepY = (h << 16) / dw, stepX = (w << 16) / dh, x0 = cx - dw / 2, y0 = cy - dh / 2;
+    for (int j = 0; j < dh; j++) { int gy = y0 + j; if (gy < gClipLo || gy >= gClipHi) continue;
+        u16 *row = growp(gy); int sx = (j * stepX) >> 16; int fy = (h << 16) - 1;
+        int i0 = x0 < 0 ? -x0 : 0, i1 = x0 + dw > SW ? SW - x0 : dw; fy -= i0 * stepY;
+        for (int i = i0; i < i1; i++, fy -= stepY) { u16 p = spr[(fy >> 16) * w + sx]; if (p & 0x8000) row[x0 + i] = p; } }
+}
