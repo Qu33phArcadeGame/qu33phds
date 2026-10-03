@@ -190,10 +190,8 @@ void drawSlot(void) {
     // the reels turning in its three windows
     gClipLo = 0; gClipHi = 2 * SH;
     drawIndexedMasked(gold ? slotmachg : slotmach, slotPalT[gold], SLOTMACH_H, 0);
-    for (int i = 0; i < 3; i++) {                                       // the windows: 25%..73% across, 37.5%..48% down
-        int wx = 64 + i * 42, wy = 144;
-        blitScaled(SYM[reel[i]], 52, 52, wx + 19, wy + 20, 29, 29);
-    }
+    static const int WINX[3] = { 77, 126, 174 };                     // the centres of the machine's three windows
+    for (int i = 0; i < 3; i++) blitScaled(SYM[reel[i]], 52, 52, WINX[i], 164, 29, 29);
     if (slotPayT) {                                                     // the paytable, over the top screen
         for (int y = 0; y < SH; y++) for (int x = 0; x < SW; x++) bufTop[y * SW + x] = ((bufTop[y * SW + x] >> 2) & 0x1CE7) | 0x8000;
         textC(bufTop, 4, gold ? "GOLDEN SLOT MACHINE" : "QU33PH SLOTS", GOLD, 1);

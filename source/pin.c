@@ -20,11 +20,13 @@
 #define RY (R * 1.35f)
 static const float QTL[2] = { 0.25f, 0.43f }, QTR[2] = { 0.77f, 0.42f }, QBL[2] = { 0.23f, 0.805f }, QBR[2] = { 0.82f, 0.805f };
 typedef struct { float x, y, r; int hit, sling; } Bump;
-// an even, square set of four bumpers in two straight rows, centred on the field. The columns
-// sit 0.27 apart so there's a clear 0.08 channel (wider than the marker ball) down the middle
-// and down each side, so the ball can always get past them. (The website's are deliberately
-// staggered; the art's own bumpers are painted out of the table and these are drawn instead.)
-static Bump bumps[6] = { {0.355f,-0.05f,0.095f,0,0}, {0.625f,-0.05f,0.095f,0,0}, {0.355f,0.13f,0.095f,0,0}, {0.625f,0.13f,0.095f,0,0}, {0.22f,0.92f,0.09f,0,1}, {0.71f,0.92f,0.09f,0,1} };
+static Bump bumps[6] = { {0.325f,0,0.105f,0,0}, {0.485f,-0.10f,0.105f,0,0}, {0.64f,0.03f,0.105f,0,0}, {0.485f,0.12f,0.105f,0,0}, {0.22f,0.92f,0.09f,0,1}, {0.71f,0.92f,0.09f,0,1} };
+// the flippers: an even, matched pair. The website's sit at slightly different heights and
+// spacings (0.22,1.02 and 0.70,1.05); these share one height and mirror each other about the
+// middle of the same 0.13-wide drain gap.
+#define FL_Y 1.035f
+#define FL_LX 0.215f
+#define FL_RX 0.705f
 static const float CH_X = 0.14f, CH_Y = 0.55f, CH_W = 0.22f, CH_H = 0.09f, MG_X = 0.70f, MG_Y = -0.17f, MG_W = 0.275f, MG_H = 0.16f;
 static const float TRIS[2][7][2] = {
     { {0.000f,0.936f},{0.033f,0.789f},{0.092f,0.780f},{0.205f,0.957f},{0.198f,1.035f},{0.125f,1.041f},{0.003f,0.948f} },
@@ -148,8 +150,8 @@ static void pinStep(void) {
     if (b.toMega && b.y < 0.11f && b.x > MG_X - 0.05f && b.x < MG_X + MG_W + 0.05f) {
         score += 1000; megaFlash = 50; say("MEGA! +1000", 70); b.toMega = 0; b.megaT = 0; b.vy = 0.014f; b.vx = (0.5f - b.x) * 0.02f; sfxPlop(); }
     triCollide();
-    flipper(0.22f, 1.02f, 0.5f - fl, 0.20f, fl);
-    flipper(0.70f, 1.05f, (3.14159265f - 0.5f) + fr, 0.20f, fr);
+    flipper(FL_LX, FL_Y, 0.5f - fl, 0.20f, fl);
+    flipper(FL_RX, FL_Y, (3.14159265f - 0.5f) + fr, 0.20f, fr);
     if (b.y > 1.18f) { if (--balls <= 0) endGame(); else newBall(); }
 }
 
@@ -178,30 +180,19 @@ static void ring(float cx, float cy, float rx, float ry, u16 c, int thick) {
 static void drawFlipper(float px, float py, float ang, float len, int mirror) {
     float ax, ay, bx, by; proj(px, py, &ax, &ay); proj(px + fcos(ang) * len, py + fsin(ang) * len, &bx, &by);
     float dx = bx - ax, dy = by - ay, L = fsqrt(dx * dx + dy * dy) * 1.08f, a = fatan2r(dy, dx);
-    int cart = sv.theme == 1; const u16 *s = cart ? pb_padc : pb_pad; int w = PB_PAD_W, h = cart ? PB_PADC_H : PB_PAD_H;
-    (void)mirror;
+    int cart = sv.theme == 1; int w = PB_PAD_W, h = cart ? PB_PADC_H : PB_PAD_H;
+    const u16 *s = cart ? (mirror ? pb_padcm : pb_padc) : (mirror ? pb_padm : pb_pad);
+    if (mirror) a -= 3.14159265f;          // the right flipper: the left one's reflection, so the pair matches
     drawMarkerFx(s, w, h, (int)((ax + bx) / 2), (int)((ay + by) / 2), a, L / w, 2);
 }
 void drawPin(void) {
     char s[32];
     drawIndexed(pb_table, palT);
     gClipLo = 0; gClipHi = 2 * SH;
-    // the bumpers: drawn as the art's glowing cylinders, back row first (cyan / pink, alternating)
-    for (int i = 0; i < 4; i++) { Bump *p = &bumps[i];
-        float x, y; proj(p->x, p->y, &x, &y); float rx = sizePx(p->r, p->y) * 1.3f, ry = rx * 0.52f, hgt = ry * 1.25f;   // (drawn a little larger than the hit circle, like the art)
-        int cyan = (i == 0 || i == 3); u16 rim = cyan ? COL(7, 31, 29) : COL(31, 7, 13), rimD = cyan ? COL(2, 14, 14) : COL(14, 2, 6);
-        if (p->hit > 0) rim = WHITE;
-        for (int j = (int)-ry; j <= (int)(ry + hgt); j++) {           // body: the cylinder's side, darker toward the bottom
-            float yy = j < 0 ? 0 : j > hgt ? hgt : j; float k = j < hgt ? 1 : 1 - ((j - hgt) / ry) * ((j - hgt) / ry);
-            if (k < 0) continue; int half = (int)(rx * fsqrt(k));
-            u16 c = j > hgt - 2 ? rim : COL(6 - (int)(yy / hgt * 3), 6 - (int)(yy / hgt * 3), 12 - (int)(yy / hgt * 5));   // glossy side, lit rim at its foot
-            for (int q = -half; q <= half; q++) gpx((int)x + q, (int)y + j, c);
-        }
-        for (int j = (int)-ry; j <= (int)ry; j++) {                    // the top: dark cap with a bright ring
-            float k = 1 - (j / ry) * (j / ry); if (k < 0) continue; int half = (int)(rx * fsqrt(k)), inner = (int)(rx * 0.78f * fsqrt(k));
-            for (int q = -half; q <= half; q++) { int a = q < 0 ? -q : q; gpx((int)x + q, (int)y + j, a > inner ? rim : (a > inner - 2 ? rimD : COL(2, 3, 7))); }
-        }
-    }
+    for (int i = 0; i < 6; i++) { Bump *p = &bumps[i]; if (p->sling) continue;
+        float x, y; proj(p->x, p->y, &x, &y); float rx = sizePx(p->r, p->y), ry = rx * 0.52f;
+        u16 c = i % 2 ? COL(31, 7, 13) : COL(7, 31, 29); if (p->hit > 0) c = WHITE;
+        ring(x, y, rx, ry, c, p->hit > 0 ? 3 : 2); }
     {   // the MEGA target
         float ax, ay, bx, by, cx, cy, dx, dy; proj(MG_X, MG_Y, &ax, &ay); proj(MG_X + MG_W, MG_Y, &bx, &by); proj(MG_X + MG_W, MG_Y + MG_H, &cx, &cy); proj(MG_X, MG_Y + MG_H, &dx, &dy);
         u16 c = megaFlash > 0 ? COL(31, 30, 22) : COL(31, 26, 9);
@@ -211,8 +202,8 @@ void drawPin(void) {
         if (megaFlash > 0) for (int y = (int)ay; y < (int)dy; y++) for (int x = (int)ax; x < (int)bx; x++) if ((x ^ y) & 1) gpx(x, y, COL(31, 26, 9));
         gtext((int)((ax + bx) / 2) - textW("MEGA", 1) / 2, (int)ay - 15, "MEGA", COL(31, 26, 9), 1);
     }
-    drawFlipper(0.22f, 1.02f, 0.5f - fl, 0.20f, 1);
-    drawFlipper(0.70f, 1.05f, (3.14159265f - 0.5f) + fr, 0.20f, 0);
+    drawFlipper(FL_LX, FL_Y, 0.5f - fl, 0.20f, 0);
+    drawFlipper(FL_RX, FL_Y, (3.14159265f - 0.5f) + fr, 0.20f, 1);
     if (state != ST_OVER) { float x, y; proj(b.x, b.y, &x, &y); float sc = sizePx(RY * 2, b.y) / PB_M0_H;
         drawMarkerFx(b.color ? pb_m1 : pb_m0, PB_M0_W, PB_M0_H, (int)x, (int)y, b.spin, sc, b.color ? 1 : 0); }
     sprintf(s, "SCORE %d", score); text(bufTop, 6, 4, s, WHITE, 1);

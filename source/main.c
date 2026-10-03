@@ -109,7 +109,7 @@ static void drawTitle(void) {
     char s[32], a[10];
     if (sv.high1p[0].name[0]) { scoreStr(a, sv.high1p[0].score2); sprintf(s, "HIGH SCORE  %s", a); textC(bufTop, 128, s, WHITE, 1); }
     textC(bufTop, 150, "swipe or D-pad + A to throw", GREY, 1);
-    textC(bufTop, 166, saveOK ? "progress saves to your SD card" : "no SD card: progress not saved", saveOK ? GREY : RED, 1);
+    textC(bufTop, 166, saveOK ? "your progress saves automatically" : "no SD card: progress not saved", saveOK ? GREY : RED, 1);
     fillScreen(bufBot, DARK);
     titleLayout();
     drawBtns(bufBot, B, 7, sel < 7 ? sel : -1);
