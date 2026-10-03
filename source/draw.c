@@ -193,6 +193,7 @@ void coinCount(u16 *buf, int x, int y) {
 u16 uiGold = COL(31, 24, 2), uiYellow = COL(31, 27, 4), uiGrey = COL(18, 18, 18), uiIcon = COL(19, 19, 20);
 u16 logoT[LOGO_W * LOGO_H];
 u16 arcIcT[9][ARCIC_W * ARCIC_H];
+u16 slotPalT[2][256];
 u16 pmT[3][PM_BLUE_W * PM_BLUE_H > PM_RED_W * PM_RED_H ? PM_BLUE_W * PM_BLUE_H : PM_RED_W * PM_RED_H];
 u16 coinT[COIN_W * COIN_H], icCoinBigT[IC_COINBIG_W * IC_COINBIG_H], slotSymT[7][SLOT_LOGO_W * SLOT_LOGO_H];
 u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
@@ -295,6 +296,7 @@ void themeUI(int t) {
           u16 c = slotSymT[k][i]; int lum = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31);
           if (lum > 12) slotSymT[k][i] = bright(bright(c)); } }
     for (int k = 0; k < 9; k++) { const u16 *src = &arc_icons[k * ARCIC_W * ARCIC_H]; CTINT(arcIcT[k], src, ARCIC_W * ARCIC_H) }   // the arcade's cabinets
+    for (int i = 0; i < 255; i++) { slotPalT[0][i] = t <= 1 ? themeTint(slotmach_pal[i], t) : bright(themeTint(slotmach_pal[i], t)); slotPalT[1][i] = t <= 1 ? themeTint(slotmachg_pal[i], t) : bright(themeTint(slotmachg_pal[i], t)); }
     #undef CTINT
     #undef TINT
     uiDotRed = t <= 0 ? COL(31, 10, 10) : themeTint(COL(31, 10, 10), t);
@@ -570,4 +572,11 @@ void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh) {
     for (int j = 0; j < dh; j++) { int gy = y0 + j; if (gy < gClipLo || gy >= gClipHi) continue;
         u16 *row = growp(gy); const u16 *s = &spr[((j * sy0) >> 16) * w]; int fx = 0;
         for (int i = 0; i < dw; i++, fx += sx0) { int x = x0 + i; u16 p = s[fx >> 16]; if ((p & 0x8000) && (unsigned)x < SW) row[x] = p; } }
+}
+
+// a 256-wide indexed picture drawn into g-space from row gy0, skipping index 255 (see-through)
+void drawIndexedMasked(const u8 *img, const u16 *pal, int rows, int gy0) {
+    for (int j = 0; j < rows; j++) { int gy = gy0 + j; if (gy < 0 || gy >= 2 * SH) continue;
+        u16 *row = growp(gy); const u8 *s = &img[j * SW];
+        for (int x = 0; x < SW; x++) { u8 k = s[x]; if (k != 255) row[x] = pal[k]; } }
 }

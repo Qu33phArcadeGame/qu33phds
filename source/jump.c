@@ -44,6 +44,62 @@ enum { ST_PLAY, ST_OVER };
 #define JBEST(m) sv.spare[m]                           // each mode's best (spare save room, so old saves read 0)
 
 int jumpEnter(void) { return pakUse(JUMP_PAK, JUMP_PAK_SIZE, JUMP_PAK_ID); }
+
+// ── the runners (the website's PF_CHARS; shown by picture only) ───────────
+// cls 0 human, 1 cat (quick, jumps twice as high), 2 chicken (floats, one air jump; H3MMINGWAY
+// also lays eggs that hatch into a following flock)
+typedef struct { float speed, jump, grav; int airJumps, cls; const u16 *s[3][2]; int w[3][2], h; } Runner;
+static Runner RUN[7];
+#define JCHAR sv.spare[4]                               // the chosen runner (spare save room)
+static void runnersInit(void) {
+    #define SET(i, sp, jp, gr, aj, cl, nm, NM) RUN[i] = (Runner){ sp, jp, gr, aj, cl, { { nm##_stand##r, nm##_stand##l }, { nm##_run##r, nm##_run##l }, { nm##_jump##r, nm##_jump##l } }, \
+        { { NM##_STANDR_W, NM##_STANDL_W }, { NM##_RUNR_W, NM##_RUNL_W }, { NM##_JUMPR_W, NM##_JUMPL_W } }, NM##_STANDR_H }
+    RUN[0] = (Runner){ 1, 1, 1, 0, 0, { { jg_stand, jg_stand }, { jg_runr, jg_runl }, { jg_jumpr, jg_jumpl } }, { { JG_STAND_W, JG_STAND_W }, { JG_RUNR_W, JG_RUNL_W }, { JG_JUMPR_W, JG_JUMPL_W } }, JG_STAND_H };
+    SET(1, 1, 1, 1, 0, 0, jc_coby, JC_COBY);
+    SET(2, 1.5f, 1.414f, 1, 0, 1, jc_eph3, JC_EPH3);
+    SET(3, 1.5f, 1.414f, 1, 0, 1, jc_smok3y, JC_SMOK3Y);
+    SET(4, 1.5f, 1.025f, 0.70f, 1, 2, jc_b3ll, JC_B3LL);
+    SET(5, 1.5f, 1.025f, 0.70f, 1, 2, jc_bo, JC_BO);
+    SET(6, 1.5f, 1.025f, 0.70f, 1, 2, jc_hem, JC_HEM);
+    #undef SET
+}
+static Runner *ch(void) { if (JCHAR > 6) JCHAR = 0; return &RUN[JCHAR]; }
+static float baseZoom(void) { return ch()->cls ? BASEZ * 0.76f : BASEZ; }   // cats and chickens see more of the level
+static int airUsed;
+
+// ── H3MMINGWAY's flock: eggs every 50-100 m that crack, peek and hatch, then follow her trail ──
+#define TRAILN 512
+static float trX[TRAILN], trY[TRAILN], trD[TRAILN]; static signed char trF[TRAILN]; static int trHead, trN;
+static float trailDist, runDist, lastTX, lastTY, nextEgg; static int trailFace = 1;
+typedef struct { float born, gap, t1, t2, t3, sx, sy, lx, vs; int col, sf, init; } Chick;
+static Chick flock[14]; static int nFlock;
+static void flockReset(void) { trHead = trN = 0; trailDist = runDist = 0; nFlock = 0; trailFace = 1; nextEgg = (20 + frand() * 10) * 13; lastTX = p.x; lastTY = p.y; }
+static void flockStep(void) {
+    if (JCHAR != 6) return;
+    float dx = p.x - lastTX, dy = p.y - lastTY, d = fsqrt(dx * dx + dy * dy);
+    if (d > 0.005f) {
+        trailDist += d; runDist += fabsf_(dx); lastTX = p.x; lastTY = p.y;
+        if (dx > 0.35f) trailFace = 1; else if (dx < -0.35f) trailFace = -1;
+        int last = (trHead + TRAILN - 1) % TRAILN;
+        if (!trN || trailDist - trD[last] >= 2.5f) { trX[trHead] = p.x; trY[trHead] = p.y; trD[trHead] = trailDist; trF[trHead] = trailFace; trHead = (trHead + 1) % TRAILN; if (trN < TRAILN) trN++; }
+    }
+    if (runDist >= nextEgg) {
+        if (nFlock >= 14) { memmove(flock, flock + 1, sizeof(Chick) * 13); nFlock = 13; }
+        Chick *c = &flock[nFlock++]; memset(c, 0, sizeof *c);
+        c->born = runDist; c->gap = (7 + (nFlock - 1) * 5.5f) * 13; c->col = rand() % 5;
+        c->t1 = (20 + frand() * 10) * 13; c->t2 = (20 + frand() * 10) * 13; c->t3 = (20 + frand() * 10) * 13;
+        nextEgg = runDist + (50 + frand() * 50) * 13;
+    }
+}
+static int trailAt(float dist, float *x, float *y) {    // where she was, dist behind
+    if (!trN) return 0;
+    float want = trailDist - dist;
+    for (int k = 1; k <= trN; k++) { int i = (trHead - k + TRAILN) % TRAILN;
+        if (trD[i] <= want || k == trN) { int b = (i + 1) % TRAILN; if (k == 1) b = i;
+            float span = trD[b] - trD[i]; float t = span > 0 ? (want - trD[i]) / span : 0; if (t < 0) t = 0; if (t > 1) t = 1;
+            *x = trX[i] + (trX[b] - trX[i]) * t; *y = trY[i] + (trY[b] - trY[i]) * t; return 1; } }
+    return 0;
+}
 void jumpThemeChanged(void) {}
 static float rnd(void) { return frand(); }
 
@@ -208,20 +264,21 @@ static void startRun(int m) {
     startX = W * 0.5f; startY = H * 0.72f;
     memset(&p, 0, sizeof p); p.x = startX; p.y = startY - 15; p.w = 20; p.h = 30; p.onGround = 1; p.face = 1;
     bestX = startX; bestUp = startY - 15; lastGroundY = startY - 15;
-    mega.on = 0; flight = bouncing = flappy = flappyFreeze = flapEndless = 0; zoom = zoomT = BASEZ; cycles = 0; lastLaunch = -99;
+    runnersInit(); airUsed = 0;
+    mega.on = 0; flight = bouncing = flappy = flappyFreeze = flapEndless = 0; zoom = zoomT = baseZoom(); cycles = 0; lastLaunch = -99;
     megaFlash = bounceCombo = bounceFlash = flappyPassed = flappyHint = 0; noMarkerUntilX = 0; upStart = 8; flapPipeN = 0;
     camX = p.x - W * 0.4f; camY = p.y - H * 0.55f;
     for (int d = 0; d < 44; d++) { deco[d][0] = rnd(); deco[d][1] = rnd(); deco[d][2] = 0.3f + rnd() * 0.7f; deco[d][3] = 0.6f + rnd() * 1.6f; }
     if (m == M_FLAP) {
         flapEndless = 1; flapBandY = startY - H * 0.34f; flapLastX = startX + W * 0.6f;
         p.y = flapBandY; camY = p.y - H * 0.5f; camX = p.x - W * 0.5f; flappyFloorY = camY + H + 40; flappyCeilY = camY - 40; flappyEndX = 1e9f;
-        zoom = zoomT = 0.66f; flappyFreeze = 1;
+        zoom = zoomT = ch()->cls == 1 ? 0.80f : 0.66f; flappyFreeze = 1;
     } else {
         Plat *q = addPlat(startX - W * 0.28f, startY, W * 0.56f); q->ground = 1;
         if (m == M_RUN) goRight(startX + W * 0.28f, startY, 1.1f + rnd(), startX + W * 0.7f);
         else { genMode = 0; genX = startX; lastPlatX = startX; genY = startY - (48 + rnd() * 18); segLeft = 6 + rand() % 4; }
     }
-    genPath(); screen = S_JUMP;
+    flockReset(); genPath(); screen = S_JUMP;
 }
 static void gameOver(void) {
     state = ST_OVER; flappy = 0;
@@ -260,24 +317,30 @@ static void step(void) {
         if (moveDir) p.face = moveDir;
         p.vy += 0.58f; if (p.vy > 15) p.vy = 15;
     } else {
-        p.vx = moveDir * 3.4f; if (moveDir) p.face = moveDir;
-        if (jumpQ && p.onGround) { p.vy = JUMPV; p.onGround = 0; hop(); }
-        p.vy += 0.58f; if (p.vy > 15) p.vy = 15;
+        Runner *r = ch();
+        p.vx = moveDir * 3.4f * r->speed; if (moveDir) p.face = moveDir;
+        if (p.onGround) airUsed = 0;
+        if (jumpQ) {
+            if (p.onGround) { p.vy = JUMPV * r->jump; p.onGround = 0; hop(); }
+            else if (r->airJumps > airUsed) { airUsed++; p.vy = JUMPV * r->jump * 0.94f; hop(); }   // chickens: one more in the air
+        }
+        p.vy += 0.58f * r->grav; if (p.vy > 15 * r->grav) p.vy = 15 * r->grav;
     }
     jumpQ = 0;
     float prevBottom = p.y + p.h * 0.5f;
     p.x += p.vx; p.y += p.vy;
     if (!flight && !bouncing && !flappy && !flappyFreeze && p.x < camX + 8) p.x = camX + 8;
     p.onGround = 0;
+    flockStep();
     if (p.vy >= 0) { float nb = p.y + p.h * 0.5f;
         for (int i = 0; i < nPl; i++) { Plat *q = &pl[i];
             if (!(p.x + 6 > q->x && p.x - 6 < q->x + q->w && nb >= q->y && prevBottom <= q->y + 9)) continue;
             if (q->chain) { p.y = q->y - p.h * 0.5f - 1; p.vy = -11; if (p.vx < 4) p.vx = 4; bouncing = 1; bounceCombo++; bounceFlash = 32; addCoins(3); coinsWon += 3; hop(); break; }
-            if (q->flappy && !flappy && !flappyFreeze) { p.y = q->y - p.h * 0.5f - 60; p.vx = p.vy = 0; flappyFreeze = 1; flappyPassed = 0; zoomT = 0.66f; break; }
+            if (q->flappy && !flappy && !flappyFreeze) { p.y = q->y - p.h * 0.5f - 60; p.vx = p.vy = 0; flappyFreeze = 1; flappyPassed = 0; zoomT = ch()->cls == 1 ? 0.80f : 0.66f; break; }
             if (q->chair && !flight && !flappy && !flappyFreeze) { p.y = q->y - p.h * 0.5f - 1; p.vy = -16; p.vx = 8; flight = 1; zoomT = 0.62f; hop(); break; }
             p.y = q->y - p.h * 0.5f; p.vy = 0; p.onGround = 1; if (q->moving) p.x += q->dx;
-            if (flappy || flappyFreeze) { flappy = flappyFreeze = 0; zoomT = BASEZ; nPi = 0; resumeRight(); }
-            if (flight) { flight = 0; zoomT = BASEZ; mega.on = 0;
+            if (flappy || flappyFreeze) { flappy = flappyFreeze = 0; zoomT = baseZoom(); nPi = 0; resumeRight(); }
+            if (flight) { flight = 0; zoomT = baseZoom(); mega.on = 0;
                 int k = 0; for (int j = 0; j < nPl; j++) if (!(pl[j].mz && (pl[j].x > p.x + 30 || pl[j].y < p.y - 30))) pl[k++] = pl[j]; nPl = k;
                 resumeRight(); }
             if (bouncing) { bouncing = 0; if (bounceCombo >= 2) bounceFlash = 50; bounceCombo = 0; resumeRight(); }
@@ -306,9 +369,9 @@ static void step(void) {
     if (flappy) {
         if (flapEndless) { float vh = (H * 0.5f) / zoom; flappyCeilY = camY + H * 0.5f - vh + 18; flappyFloorY = camY + H * 0.5f + vh - 18; }
         for (int i = 0; i < nPi; i++) { Pipe *q = &pi[i]; float hg = q->gapH * 0.5f;
-            if (p.x + 6 > q->x && p.x - 6 < q->x + q->w && (p.y - p.h * 0.35f < q->gapY - hg || p.y + p.h * 0.35f > q->gapY + hg)) { zoomT = BASEZ; gameOver(); return; }
+            if (p.x + 6 > q->x && p.x - 6 < q->x + q->w && (p.y - p.h * 0.35f < q->gapY - hg || p.y + p.h * 0.35f > q->gapY + hg)) { zoomT = baseZoom(); gameOver(); return; }
             if (!q->passed && p.x > q->x + q->w) { q->passed = 1; flappyPassed++; addCoins(2); coinsWon += 2; } }
-        if (p.y > flappyFloorY || p.y < flappyCeilY) { zoomT = BASEZ; gameOver(); return; }
+        if (p.y > flappyFloorY || p.y < flappyCeilY) { zoomT = baseZoom(); gameOver(); return; }
     }
     if (state == ST_PLAY && !flappy && !flappyFreeze && !flight && !bouncing && p.onGround) {   // never a dead end ahead
         float pb = p.y + p.h * 0.5f; int ahead = 0;
@@ -316,7 +379,7 @@ static void step(void) {
         if (!ahead) { Plat *q = addPlat(p.x + W * 0.6f, pb, W * 0.5f); if (q) q->ground = 1;
             if (genMode != 0) { goRight(p.x + W * 1.1f, pb, 0.9f + rnd() * 0.7f, p.x + W * 1.5f); lastPlatX = genX - W * 0.2f; } }
     }
-    if (!flappy && !flappyFreeze) { float pit = (flight || bouncing) ? H * 1.7f : H * 1.0f; if (p.y - lastGroundY > pit) { flight = 0; zoomT = BASEZ; gameOver(); } }
+    if (!flappy && !flappyFreeze) { float pit = (flight || bouncing) ? H * 1.7f : H * 1.0f; if (p.y - lastGroundY > pit) { flight = 0; zoomT = baseZoom(); gameOver(); } }
 }
 void updateJump(void) {
     if (state != ST_PLAY) return;
@@ -383,12 +446,24 @@ void drawJump(void) {
         int x = (int)SXf(o->x), y = (int)(SYf(o->y) - hgt / 2); if (x < -20 || x > SW + 20) continue;
         drawMarkerFx(sp, w, JM_0_H, x, y, o->roll, hgt / JM_0_H, o->col); }
     if (mega.on && !mega.hit) { int x = (int)SXf(mega.x), y = (int)SYf(mega.y); blitRotScale(slotSymT[1], SLOT_LOGO_W, SLOT_LOGO_H, x, y, 0, mega.w * zoom / SLOT_LOGO_W); }
-    {   // the player (the website's jump_*.png art)
-        const u16 *sp; int w;
-        if (!p.onGround) { sp = p.face < 0 ? jg_jumpl : jg_jumpr; w = p.face < 0 ? JG_JUMPL_W : JG_JUMPR_W; }
-        else if (moveDir) { sp = p.face < 0 ? jg_runl : jg_runr; w = p.face < 0 ? JG_RUNL_W : JG_RUNR_W; }
-        else { sp = jg_stand; w = JG_STAND_W; }
-        float sc = zoom * 1.05f; blitRotScale(sp, w, JG_STAND_H, (int)SXf(p.x), (int)(SYf(p.y + p.h * 0.5f) - JG_STAND_H * sc / 2), 0, sc);
+    if (JCHAR == 6) for (int i = 0; i < nFlock; i++) {    // H3MMINGWAY's flock, retracing her trail
+        Chick *c = &flock[i]; float age = runDist - c->born, x, y; if (!trailAt(c->gap, &x, &y)) continue;
+        if (!c->init) { c->sx = x; c->sy = y; c->lx = x; c->sf = 1; c->init = 1; } else { c->sx += (x - c->sx) * 0.46f; c->sy += (y - c->sy) * 0.36f; }
+        c->vs = c->vs * 0.82f + (c->sx - c->lx) * 0.18f; c->lx = c->sx; if (c->vs > 0.14f) c->sf = 1; else if (c->vs < -0.14f) c->sf = -1;
+        const u16 *sp; int w, h, L = c->sf < 0, hatched = 0;
+        if (age < c->t1) { sp = L ? jf_egg0l : jf_egg0r; w = JF_EGG0R_W; h = JF_EGG0R_H; }
+        else if (age < c->t1 + c->t2) { sp = L ? jf_egg1l : jf_egg1r; w = JF_EGG1R_W; h = JF_EGG1R_H; }
+        else if (age < c->t1 + c->t2 + c->t3) { const u16 *P[5][2] = { { jf_peek0r, jf_peek0l }, { jf_peek1r, jf_peek1l }, { jf_peek2r, jf_peek2l }, { jf_peek3r, jf_peek3l }, { jf_peek4r, jf_peek4l } };
+            const int WW[5] = { JF_PEEK0R_W, JF_PEEK1R_W, JF_PEEK2R_W, JF_PEEK3R_W, JF_PEEK4R_W }; sp = P[c->col][L]; w = WW[c->col]; h = JF_PEEK0R_H; }
+        else { const u16 *P[5][2] = { { jf_chick0r, jf_chick0l }, { jf_chick1r, jf_chick1l }, { jf_chick2r, jf_chick2l }, { jf_chick3r, jf_chick3l }, { jf_chick4r, jf_chick4l } };
+            const int WW[5] = { JF_CHICK0R_W, JF_CHICK1R_W, JF_CHICK2R_W, JF_CHICK3R_W, JF_CHICK4R_W }; sp = P[c->col][L]; w = WW[c->col]; h = JF_CHICK0R_H; hatched = 1; }
+        float bob = hatched ? fsin(frame * 0.34f + c->born * 0.05f) * 1.5f * (fabsf_(c->vs) * 0.7f > 1 ? 1 : fabsf_(c->vs) * 0.7f) : 0;
+        blitScaled(sp, w, h, (int)SXf(c->sx), (int)(SYf(c->sy + p.h * 0.5f + bob) - h * zoom * 0.5f), (int)(w * zoom + 0.5f), (int)(h * zoom + 0.5f));
+    }
+    {   // the runner (the website's art for whoever you picked)
+        Runner *r = ch(); int pose = !p.onGround ? 2 : moveDir ? 1 : 0, L = p.face < 0;
+        const u16 *sp = r->s[pose][L]; int w = r->w[pose][L];
+        float sc = zoom * 1.05f; blitRotScale(sp, w, r->h, (int)SXf(p.x), (int)(SYf(p.y + p.h * 0.5f) - r->h * sc / 2), 0, sc);
     }
     sprintf(s, "%d", score); text(bufTop, 6, 4, s, WHITE, 2);
     sprintf(s, "%s  BEST %d", MODE_NAME[jMode], (int)JBEST(jMode)); text(bufTop, SW - 6 - textW(s, 1), 6, s, GOLD, 1);
@@ -400,26 +475,71 @@ void drawJump(void) {
 }
 
 // ── menu and results ──────────────────────────────────────────────────────
-static Btn JB[5];
-static void jmLayout(void) { for (int i = 0; i < 4; i++) { JB[i] = (Btn){ 38, 6 + i * 38, 180, 32, "", 0, 0 }; strcpy(JB[i].label, MODE_NAME[i]); } JB[4] = (Btn){ 68, 160, 120, 28, "BACK", 0, 0 }; }
+static Btn JB[9]; static int charSel;
+static void jmLayout(void) {
+    for (int i = 0; i < 4; i++) { JB[i] = (Btn){ 38, 4 + i * 36, 180, 31, "", 0, 0 }; strcpy(JB[i].label, MODE_NAME[i]); }
+    JB[4] = (Btn){ 10, 152, 112, 32, "RUNNER", 0, 0 }; JB[5] = (Btn){ 134, 152, 112, 32, "BACK", 0, 0 };
+}
+static void runnerPic(u16 *buf, int k, int cx, int baseY, float sc, int pose) {
+    Runner *r = &RUN[k]; blitRotScale(r->s[pose][0], r->w[pose][0], r->h, cx, baseY - (int)(r->h * sc / 2) + (buf == bufBot ? SH : 0), 0, sc);
+}
 void drawJumpMenu(void) {
     char s[40];
+    runnersInit();
     fillScreen(bufTop, DARK);
     textC(bufTop, 6, "QU33PH JUMP", GOLD, 2);
     jmLayout(); int m = menuSel < 4 ? menuSel : 0;
-    textC(bufTop, 44, MODE_NAME[m], WHITE, 2);
-    textC(bufTop, 80, MODE_BLURB[m], GREY, 1);
-    for (int i = 0; i < 4; i++) { sprintf(s, "%s  best %d", MODE_NAME[i], (int)JBEST(i)); textC(bufTop, 104 + i * 15, s, i == m ? YELLOW : GREY, 1); }
+    textC(bufTop, 42, MODE_NAME[m], WHITE, 2);
+    textC(bufTop, 76, MODE_BLURB[m], GREY, 1);
+    for (int i = 0; i < 4; i++) { sprintf(s, "%s  best %d", MODE_NAME[i], (int)JBEST(i)); textC(bufTop, 100 + i * 14, s, i == m ? YELLOW : GREY, 1); }
+    gClipLo = 0; gClipHi = 2 * SH;
+    runnerPic(bufTop, ch() - RUN, SW - 26, 180, 1.0f, (frame++ / 12) % 2 ? 1 : 0);   // your runner, ready
     coinCount(bufTop, 6, 176);
-    textS(bufTop, SW - 6 - textSW("D-pad run - A jump"), 180, "D-pad run - A jump", WHITE);
-    fillScreen(bufBot, DARK); drawBtns(bufBot, JB, 5, menuSel);
+    fillScreen(bufBot, DARK); drawBtns(bufBot, JB, 6, menuSel);
 }
 void inputJumpMenu(void) {
     jmLayout();
     if (kDown & KEY_B) { goScreen(S_ARCADE); return; }
-    int h = btnInput(JB, 5, &menuSel, 1);
+    int h = btnInput(JB, 6, &menuSel, 1);
     if (h >= 0 && h < 4) { coinsWon = 0; startRun(h); }
-    if (h == 4) goScreen(S_ARCADE);
+    if (h == 4) { charSel = (int)JCHAR; goScreen(S_JUMP_CHARS); }
+    if (h == 5) goScreen(S_ARCADE);
+}
+// pick your runner: just the pictures (four across, three below), as on the website
+static Btn CB[8];
+static void chLayout(void) {
+    for (int k = 0; k < 7; k++) { int row = k < 4 ? 0 : 1, col = row ? k - 4 : k, n = row ? 3 : 4, x0 = (SW - n * 58 - (n - 1) * 4) / 2;
+        CB[k] = (Btn){ x0 + col * 62, 4 + row * 74, 58, 70, "", 0, 0 }; }
+    CB[7] = (Btn){ 68, 156, 120, 30, "OK", 0, 0 };
+}
+void drawJumpChars(void) {
+    runnersInit(); chLayout();
+    fillScreen(bufTop, DARK);
+    textC(bufTop, 6, "PICK YOUR RUNNER", GOLD, 2);
+    gClipLo = 0; gClipHi = 2 * SH;
+    int k = charSel < 7 ? charSel : (int)JCHAR;
+    runnerPic(bufTop, k, SW / 2, 120, 2.0f, (frame++ / 10) % 2 ? 1 : 0);   // big, running on the spot
+    if (k == 6) blitScaled(jf_egg0r, JF_EGG0R_W, JF_EGG0R_H, SW / 2 + 52, 160, JF_EGG0R_W * 2, JF_EGG0R_H * 2);
+    fillScreen(bufBot, DARK);
+    for (int i = 0; i < 7; i++) {
+        int on = i == charSel, sel = i == (int)JCHAR;
+        u16 fr = on ? (sv.theme == 1 ? COL(28, 4, 4) : GOLD) : sel ? uiIcon : 0;
+        if (fr) { rect(bufBot, CB[i].x, CB[i].y, CB[i].w, 2, fr); rect(bufBot, CB[i].x, CB[i].y + CB[i].h - 2, CB[i].w, 2, fr); rect(bufBot, CB[i].x, CB[i].y, 2, CB[i].h, fr); rect(bufBot, CB[i].x + CB[i].w - 2, CB[i].y, 2, CB[i].h, fr); }
+        runnerPic(bufBot, i, CB[i].x + CB[i].w / 2, CB[i].y + 36, 1.4f * (RUN[i].cls ? 1.0f : 0.85f), 0);
+    }
+    drawBtns(bufBot, &CB[7], 1, charSel == 7 ? 0 : -1);
+}
+void inputJumpChars(void) {
+    chLayout();
+    if (kDown & KEY_B) { goScreen(S_JUMP_MENU); return; }
+    if (kDown & KEY_LEFT) charSel = (charSel + 7) % 8;
+    if (kDown & KEY_RIGHT) charSel = (charSel + 1) % 8;
+    if (kDown & KEY_UP) charSel = charSel >= 4 && charSel < 7 ? charSel - 4 : charSel;
+    if (kDown & KEY_DOWN) charSel = charSel < 4 ? (charSel < 3 ? charSel + 4 : 7) : 7;
+    int keep = kDown; kDown &= ~(KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT);
+    int s = charSel, h = btnInput(CB, 8, &s, 1); kDown = keep; charSel = s;
+    if (h >= 0 && h < 7) { JCHAR = h; saveWrite(); }
+    if (h == 7) goScreen(S_JUMP_MENU);
 }
 void drawJumpOver(void) {
     char s[40];

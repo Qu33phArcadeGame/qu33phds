@@ -20,7 +20,11 @@
 #define RY (R * 1.35f)
 static const float QTL[2] = { 0.25f, 0.43f }, QTR[2] = { 0.77f, 0.42f }, QBL[2] = { 0.23f, 0.805f }, QBR[2] = { 0.82f, 0.805f };
 typedef struct { float x, y, r; int hit, sling; } Bump;
-static Bump bumps[6] = { {0.325f,0,0.105f,0,0}, {0.485f,-0.10f,0.105f,0,0}, {0.64f,0.03f,0.105f,0,0}, {0.485f,0.12f,0.105f,0,0}, {0.22f,0.92f,0.09f,0,1}, {0.71f,0.92f,0.09f,0,1} };
+// an even, square set of four bumpers in two straight rows, centred on the field. The columns
+// sit 0.27 apart so there's a clear 0.08 channel (wider than the marker ball) down the middle
+// and down each side, so the ball can always get past them. (The website's are deliberately
+// staggered; the art's own bumpers are painted out of the table and these are drawn instead.)
+static Bump bumps[6] = { {0.355f,-0.05f,0.095f,0,0}, {0.625f,-0.05f,0.095f,0,0}, {0.355f,0.13f,0.095f,0,0}, {0.625f,0.13f,0.095f,0,0}, {0.22f,0.92f,0.09f,0,1}, {0.71f,0.92f,0.09f,0,1} };
 static const float CH_X = 0.14f, CH_Y = 0.55f, CH_W = 0.22f, CH_H = 0.09f, MG_X = 0.70f, MG_Y = -0.17f, MG_W = 0.275f, MG_H = 0.16f;
 static const float TRIS[2][7][2] = {
     { {0.000f,0.936f},{0.033f,0.789f},{0.092f,0.780f},{0.205f,0.957f},{0.198f,1.035f},{0.125f,1.041f},{0.003f,0.948f} },
@@ -182,10 +186,22 @@ void drawPin(void) {
     char s[32];
     drawIndexed(pb_table, palT);
     gClipLo = 0; gClipHi = 2 * SH;
-    for (int i = 0; i < 6; i++) { Bump *p = &bumps[i]; if (p->sling) continue;
-        float x, y; proj(p->x, p->y, &x, &y); float rx = sizePx(p->r, p->y), ry = rx * 0.52f;
-        u16 c = i % 2 ? COL(31, 7, 13) : COL(7, 31, 29); if (p->hit > 0) c = WHITE;
-        ring(x, y, rx, ry, c, p->hit > 0 ? 3 : 2); }
+    // the bumpers: drawn as the art's glowing cylinders, back row first (cyan / pink, alternating)
+    for (int i = 0; i < 4; i++) { Bump *p = &bumps[i];
+        float x, y; proj(p->x, p->y, &x, &y); float rx = sizePx(p->r, p->y) * 1.3f, ry = rx * 0.52f, hgt = ry * 1.25f;   // (drawn a little larger than the hit circle, like the art)
+        int cyan = (i == 0 || i == 3); u16 rim = cyan ? COL(7, 31, 29) : COL(31, 7, 13), rimD = cyan ? COL(2, 14, 14) : COL(14, 2, 6);
+        if (p->hit > 0) rim = WHITE;
+        for (int j = (int)-ry; j <= (int)(ry + hgt); j++) {           // body: the cylinder's side, darker toward the bottom
+            float yy = j < 0 ? 0 : j > hgt ? hgt : j; float k = j < hgt ? 1 : 1 - ((j - hgt) / ry) * ((j - hgt) / ry);
+            if (k < 0) continue; int half = (int)(rx * fsqrt(k));
+            u16 c = j > hgt - 2 ? rim : COL(6 - (int)(yy / hgt * 3), 6 - (int)(yy / hgt * 3), 12 - (int)(yy / hgt * 5));   // glossy side, lit rim at its foot
+            for (int q = -half; q <= half; q++) gpx((int)x + q, (int)y + j, c);
+        }
+        for (int j = (int)-ry; j <= (int)ry; j++) {                    // the top: dark cap with a bright ring
+            float k = 1 - (j / ry) * (j / ry); if (k < 0) continue; int half = (int)(rx * fsqrt(k)), inner = (int)(rx * 0.78f * fsqrt(k));
+            for (int q = -half; q <= half; q++) { int a = q < 0 ? -q : q; gpx((int)x + q, (int)y + j, a > inner ? rim : (a > inner - 2 ? rimD : COL(2, 3, 7))); }
+        }
+    }
     {   // the MEGA target
         float ax, ay, bx, by, cx, cy, dx, dy; proj(MG_X, MG_Y, &ax, &ay); proj(MG_X + MG_W, MG_Y, &bx, &by); proj(MG_X + MG_W, MG_Y + MG_H, &cx, &cy); proj(MG_X, MG_Y + MG_H, &dx, &dy);
         u16 c = megaFlash > 0 ? COL(31, 30, 22) : COL(31, 26, 9);

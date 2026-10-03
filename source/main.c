@@ -545,6 +545,7 @@ int main(void) {
             case S_JUMP_MENU: inputJumpMenu(); break;
             case S_JUMP: case S_JUMP_PAUSE: inputJump(); if (screen == S_JUMP) updateJump(); break;
             case S_JUMP_OVER: inputJumpOver(); break;
+            case S_JUMP_CHARS: inputJumpChars(); break;
         }
         // Mini Qu33ph has its own music, from its menu to its results (as on the website)
         // the arcade games have their own music, from their menu to their results (as on the website)
@@ -603,6 +604,7 @@ int main(void) {
             case S_JUMP_MENU: drawJumpMenu(); break;
             case S_JUMP: case S_JUMP_PAUSE: drawJump(); break;
             case S_JUMP_OVER: drawJumpOver(); break;
+            case S_JUMP_CHARS: drawJumpChars(); break;
         }
         drawToast();
         // hand both finished frames to the screens: flush them out of the CPU's cache first

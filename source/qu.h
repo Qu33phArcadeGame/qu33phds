@@ -32,7 +32,7 @@ enum { S_TITLE, S_PLAY, S_PAUSE, S_HANDOFF, S_RESULTS, S_SHOP, S_ACH, S_CAREER, 
        S_FLIP_MENU, S_FLIP_LEVELS, S_FLIP, S_FLIP_PAUSE, S_FLIP_OVER,
        S_DOZER_MENU, S_DOZER, S_DOZER_PAUSE, S_DOZER_OVER,
        S_PIN_MENU, S_PIN, S_PIN_PAUSE, S_PIN_OVER,
-       S_JUMP_MENU, S_JUMP, S_JUMP_PAUSE, S_JUMP_OVER };
+       S_JUMP_MENU, S_JUMP, S_JUMP_PAUSE, S_JUMP_OVER, S_JUMP_CHARS };
 extern int screen;
 enum { M_SINGLE = 1, M_TWO = 2, M_OLYMPICS = 3 };
 extern int mode;
@@ -108,6 +108,8 @@ void drawIndexed(const u8 *idx, const u16 *pal);
 void themeUI(int t);             // every screen's look for theme t: backgrounds, buttons, accents, logo
 extern u16 logoT[LOGO_W * LOGO_H];
 extern u16 arcIcT[9][ARCIC_W * ARCIC_H];
+extern u16 slotPalT[2][256];
+void drawIndexedMasked(const u8 *img, const u16 *pal, int rows, int gy0);
 extern u16 pmT[3][PM_BLUE_W * PM_BLUE_H > PM_RED_W * PM_RED_H ? PM_BLUE_W * PM_BLUE_H : PM_RED_W * PM_RED_H];
 void blitGlow(u16 *buf, const u16 *spr, int w, int h, int x, int y, u16 glow);
 extern u16 icSlotT[IC_SLOT_W * IC_SLOT_H], icArcadeT[IC_ARCADE_W * IC_ARCADE_H], icCoinT[IC_COIN_W * IC_COIN_H], uiInk, uiDotRed;
@@ -226,7 +228,7 @@ void drawPinOver(void); void inputPinOver(void);
 int  jumpEnter(void); void jumpThemeChanged(void);
 void drawJumpMenu(void); void inputJumpMenu(void);
 void drawJump(void); void inputJump(void); void updateJump(void);
-void drawJumpOver(void); void inputJumpOver(void);
+void drawJumpOver(void); void inputJumpOver(void); void drawJumpChars(void); void inputJumpChars(void);
 extern int gStip; extern u16 gSil; extern int gGlowShop;
 void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh);
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col);                // 1 = draw sprites see-through (every other pixel)

@@ -3,7 +3,7 @@
 #include "qu.h"
 #define PIN_PAK "pin.pak"
 #define PIN_PAK_SIZE 330896
-#define PIN_PAK_ID 297156095u
+#define PIN_PAK_ID 2091352669u
 #define pb_pal ((const u16 *)(arcPak + 8))
 #define PB_PAL_BYTES 512
 #define pb_table ((const u8 *)(arcPak + 520))

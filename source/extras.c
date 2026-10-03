@@ -181,38 +181,49 @@ void updateSlot(void) {
         saveWrite();
     }
 }
-static Btn slotB[3];
+static Btn slotB[4];
+static int slotPayT;                        // showing the paytable instead of the machine's top
 void drawSlot(void) {
     int gold = shopActive(SH_GOLDSLOT);
-    fillScreen(bufTop, DARK);
-    textC(bufTop, 4, gold ? "GOLDEN SLOT MACHINE" : "QU33PH SLOTS", GOLD, 1);
-    const char *rows[8] = { "LOGO LOGO LOGO   200", "MEGA x3   50   COIN x3   30", "CHAIR x3  20   2 LOGOS   15",
-                            "RED GREEN BLUE (blue 3rd)  10", "any trio 6   2 MEGA 8   2 CHAIR 6", "2 COIN 5   colour x3  4",
-                            "logo middle 3   pair 2", "coin middle 2   chair middle 1" };
-    for (int i = 0; i < 8; i++) textC(bufTop, 26 + i * 17, rows[i], i == 0 ? YELLOW : WHITE, 1);
-    coinCount(bufTop, 6, 170);
-    fillScreen(bufBot, DARK);
-    box(bufBot, 34, 14, 188, 72, BLACK, GOLD);
-    for (int i = 0; i < 3; i++) {
-        blit(bufBot, SYM[reel[i]], 52, 52, 44 + i * 58, 24);
+    fillScreen(bufTop, DARK); fillScreen(bufBot, DARK);
+    // the website's slot machine picture (its Golden one with the Gold Slot), spanning both screens,
+    // the reels turning in its three windows
+    gClipLo = 0; gClipHi = 2 * SH;
+    drawIndexedMasked(gold ? slotmachg : slotmach, slotPalT[gold], SLOTMACH_H, 0);
+    for (int i = 0; i < 3; i++) {                                       // the windows: 25%..73% across, 37.5%..48% down
+        int wx = 64 + i * 42, wy = 144;
+        blitScaled(SYM[reel[i]], 52, 52, wx + 19, wy + 20, 29, 29);
     }
+    if (slotPayT) {                                                     // the paytable, over the top screen
+        for (int y = 0; y < SH; y++) for (int x = 0; x < SW; x++) bufTop[y * SW + x] = ((bufTop[y * SW + x] >> 2) & 0x1CE7) | 0x8000;
+        textC(bufTop, 4, gold ? "GOLDEN SLOT MACHINE" : "QU33PH SLOTS", GOLD, 1);
+        const char *rows[8] = { "LOGO LOGO LOGO   200", "MEGA x3   50   COIN x3   30", "CHAIR x3  20   2 LOGOS   15",
+                                "RED GREEN BLUE (blue 3rd)  10", "any trio 6   2 MEGA 8   2 CHAIR 6", "2 COIN 5   colour x3  4",
+                                "logo middle 3   pair 2", "coin middle 2   chair middle 1" };
+        for (int i = 0; i < 8; i++) textC(bufTop, 26 + i * 17, rows[i], i == 0 ? YELLOW : WHITE, 1);
+        if (gold) textC(bufTop, 168, "Golden: 5x and 10x spins pay 5x / 10x", GREY, 1);
+    }
+    coinCount(bufTop, 6, 4);
     char s[32];
-    if (lastWin) { sprintf(s, "%s  +%d", lastLabel, lastWin); textC(bufBot, 94, s, LIME, 1); }
-    else if (lastLabel[0]) textC(bufBot, 94, lastLabel, GREY, 1);
+    for (int y = 0; y < 22; y++) for (int x = 0; x < SW; x++) bufBot[y * SW + x] = ((bufBot[y * SW + x] >> 1) & 0x3DEF) | 0x8000;
+    if (lastWin) { sprintf(s, "%s  +%d", lastLabel, lastWin); textC(bufBot, 4, s, LIME, 1); }
+    else if (lastLabel[0]) textC(bufBot, 4, lastLabel, WHITE, 1);
     int b1 = gold ? 5 : 1, b2 = gold ? 10 : 3;
-    slotB[0] = (Btn){ 20, 116, 104, 36, "", 0, sv.coins < b1 }; sprintf(slotB[0].label, "SPIN  %d", b1);
-    slotB[1] = (Btn){ 132, 116, 104, 36, "", 0, sv.coins < b2 }; sprintf(slotB[1].label, "%dx SPIN  %d", b2, b2);
-    slotB[2] = (Btn){ 78, 158, 100, 28, "BACK", 0, 0 };
-    drawBtns(bufBot, slotB, 3, slotSel);
+    slotB[0] = (Btn){ 14, 108, 110, 36, "", 0, sv.coins < b1 }; sprintf(slotB[0].label, "SPIN  %d", b1);
+    slotB[1] = (Btn){ 132, 108, 110, 36, "", 0, sv.coins < b2 }; sprintf(slotB[1].label, "%dx SPIN  %d", b2, b2);
+    slotB[2] = (Btn){ 14, 152, 110, 30, "", 0, 0 }; strcpy(slotB[2].label, slotPayT ? "MACHINE" : "PAYTABLE");
+    slotB[3] = (Btn){ 132, 152, 110, 30, "BACK", 0, 0 };
+    drawBtns(bufBot, slotB, 4, slotSel);
 }
 void inputSlot(int down, int tx, int ty) {
     (void)tx; (void)ty;
     int gold = shopActive(SH_GOLDSLOT);
     if (down & KEY_B) { goScreen(S_TITLE); return; }
-    int h = btnInput(slotB, 3, &slotSel, 2);
+    int h = btnInput(slotB, 4, &slotSel, 2);
     if (h == 0) spin(gold ? 5 : 1);
     if (h == 1) spin(gold ? 10 : 3);
-    if (h == 2) goScreen(S_TITLE);
+    if (h == 2) slotPayT = !slotPayT;
+    if (h == 3) goScreen(S_TITLE);
 }
 
 // ══ PLINQU33PH ════════════════════════════════════════════════════════════
