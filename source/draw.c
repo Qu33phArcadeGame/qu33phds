@@ -506,8 +506,9 @@ static const u16 MK_COLS[3] = { COL(31, 7, 7), COL(7, 29, 9), COL(9, 14, 31) };
 // The marker is rotated ONCE into a small scratch picture; the outline / glow passes then just
 // stamp that picture's shape at a few offsets (whole-number copies, no rotation maths). Before,
 // every pass re-rotated the sprite: up to 17 full rotations per marker per frame in NEON.
-#define FXMAX 96
+#define FXMAX 128                                 // (big enough for the blue marker: it was too big at 96, so it never got its glow)
 static u16 fxBuf[FXMAX * FXMAX];
+static short fxLo[FXMAX], fxHi[FXMAX];             // each scratch row's first and last solid pixel
 u16 gTouchGlow;                                   // when set: a glow in this colour (markers touching)
 FAST static int rotToScratch(const u16 *spr, int w, int h, float ang, float scale) {
     float inv = 1.0f / scale;
@@ -516,19 +517,23 @@ FAST static int rotToScratch(const u16 *spr, int w, int h, float ang, float scal
     int n = 2 * r + 1;
     for (int dy = -r; dy <= r; dy++) {
         int sxf = ci * (-r) + si * dy + (w << 15), syf = -si * (-r) + ci * dy + (h << 15);
-        u16 *row = &fxBuf[(dy + r) * n];
+        u16 *row = &fxBuf[(dy + r) * n]; int lo = n, hi = -1;
         for (int dx = -r; dx <= r; dx++, sxf += ci, syf -= si) {
             int ix = sxf >> 16, iy = syf >> 16;
-            row[dx + r] = ((unsigned)ix < (unsigned)w && (unsigned)iy < (unsigned)h) ? spr[iy * w + ix] : 0;
+            u16 p = ((unsigned)ix < (unsigned)w && (unsigned)iy < (unsigned)h) ? spr[iy * w + ix] : 0;
+            row[dx + r] = p;
+            if (p & 0x8000) { if (dx + r < lo) lo = dx + r; hi = dx + r; }
         }
+        fxLo[dy + r] = lo; fxHi[dy + r] = hi;          // where this row's picture starts and ends
     }
     return r;
 }
 FAST static void stamp(int cx, int cy, int r, u16 col, int stip) {     // col 0 = the picture itself
     int n = 2 * r + 1;
     for (int j = 0; j < n; j++) { int gy = cy - r + j; if (gy < gClipLo || gy >= gClipHi) continue;
+        if (fxHi[j] < 0) continue;                    // (an empty row)
         u16 *row = growp(gy); const u16 *s = &fxBuf[j * n];
-        for (int i = 0; i < n; i++) { u16 p = s[i]; if (!(p & 0x8000)) continue; int x = cx - r + i;
+        for (int i = fxLo[j]; i <= fxHi[j]; i++) { u16 p = s[i]; if (!(p & 0x8000)) continue; int x = cx - r + i;
             if ((unsigned)x >= SW || (stip && ((x ^ gy) & 1))) continue; row[x] = col ? col : p; } }
 }
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col) {
@@ -537,8 +542,14 @@ void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float
     if (scale <= 0.01f) return;
     int r = rotToScratch(spr, w, h, ang, scale);
     if (r < 0) { blitCore(spr, w, h, cx, cy, ang, scale); return; }                          // (too big for the scratch: plain)
-    if (neon || gGlowShop || gTouchGlow) {
-        u16 g = gTouchGlow ? gTouchGlow : neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20)), dim = mix(g, BLACK, 1, 2);
+    if (gTouchGlow) {                                   // touching: a bold, solid gold halo you can't miss
+        static const signed char T4[16][2] = { {-4,0},{4,0},{0,-4},{0,4},{-3,-3},{3,-3},{-3,3},{3,3},{-3,0},{3,0},{0,-3},{0,3},{-2,-2},{2,-2},{-2,2},{2,2} };
+        u16 dim = mix(gTouchGlow, BLACK, 1, 3);
+        for (int k = 0; k < 8; k++) stamp(cx + T4[k][0], cy + T4[k][1], r, dim, 0);
+        for (int k = 8; k < 16; k++) stamp(cx + T4[k][0], cy + T4[k][1], r, gTouchGlow, 0);
+        for (int k = 0; k < 4; k++) stamp(cx + (k == 0) - (k == 1), cy + (k == 2) - (k == 3), r, gTouchGlow, 0);
+    } else if (neon || gGlowShop) {
+        u16 g = neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20)), dim = mix(g, BLACK, 1, 2);
         static const signed char R3[12][2] = { {-3,0},{3,0},{0,-3},{0,3},{-2,-2},{2,-2},{-2,2},{2,2},{-3,-1},{3,1},{-1,3},{1,-3} };
         for (int k = 0; k < 12; k++) stamp(cx + R3[k][0], cy + R3[k][1], r, dim, 1);
         for (int k = 0; k < 4; k++) stamp(cx + (k == 0) - (k == 1), cy + (k == 2) - (k == 3), r, g, 0);

@@ -127,8 +127,9 @@ static int wsy(float wy) { return (int)(wy * K) - passOff; }
 
 // ── a turn ────────────────────────────────────────────────────────────────
 static void resetSet(void) { current = 0; memset(mk, 0, sizeof mk); }
+static int setHoldT;
 void startMatch(void) {
-    resetSet(); roundFrames = 0; suddenDeath = 0; matchOver = 0; magnetAcc = 0;
+    resetSet(); setHoldT = 0; roundFrames = 0; suddenDeath = 0; matchOver = 0; magnetAcc = 0;
     int rt = (mode == M_TWO) ? sv.timer2p : sv.timer1p;
     if (shopActive(SH_XTIME)) rt += 5;
     totalFrames = (mode == M_TWO) ? rt * 60 : (rt * 3 / 2) * 60;     // 1P & Olympics: sudden death for the last third
@@ -187,6 +188,7 @@ static int calcRoundScore(void) {
     return 0;
 }
 static void tryAdvanceRound(void) {
+    if (setHoldT > 0) { if (--setHoldT == 0) { resetSet(); lastThrown = -1; } return; }   // then the top screen glides back to rest
     if (current < 3) return;
     for (int i = 0; i < 3; i++) if (!mk[i].stopped && !mk[i].fallen) return;
     Marker *g = &mk[0], *r = &mk[1], *b = &mk[2];
@@ -196,12 +198,11 @@ static void tryAdvanceRound(void) {
     int rs = calcRoundScore();
     addScore(rs);
     char t[16], s[10]; scoreStr(s, rs); sprintf(t, "+%s", s);
-    lastThrown = -1;                                   // set scored: the top screen glides back to rest
     if (!g->fallen && !r->fallen && !b->fallen && touching(g, r) && touching(r, b) && touching(g, b)) {
         showBanner("QU33PH!", t, YELLOW); sfxPlop(); trackQu33ph(suddenDeath);
         confetti((g->x + r->x + b->x) / 3, (g->y + r->y + b->y) / 3);
     } else showBanner(t, 0, WHITE);
-    resetSet();
+    setHoldT = 45;                                     // keep the markers (and their touch glow) up for 3/4 s, then clear
 }
 
 void matchUpdate(void) {

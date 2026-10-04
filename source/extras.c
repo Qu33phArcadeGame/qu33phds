@@ -10,6 +10,8 @@ static int olyN[8];                                  // the 8 nations; the playe
 static int qf1[2], qf2[2], qf3[2], qf4[2], sf1[2], sf2[2], fin[2];   // scores (doubled), -1 = not played
 static int olyRound, olyOut, olyMedal, olyCoins, olyTotal, olySel;
 static const int REWARD[4] = { 0, 5, 10, 15 };      // win QF = 5, SF = 10, FINAL = 15 coins
+static const int SPECIAL_REWARD[4] = { 0, 1, 2, 3 };  // the Special Olympics pays less (as the website)
+int olySpecial;                                       // playing the Special Olympics (a second chance after losing)
 
 // Rival scores: the website's formula (85-130), scaled to what's reachable on the DS —
 // a flawless DS game (a QU33PH every set) scores about 40-45. Raise OLY_SCALE for a harder Olympics.
@@ -17,6 +19,7 @@ static const int REWARD[4] = { 0, 5, 10, 15 };      // win QF = 5, SF = 10, FINA
 static int simScore(void) { int b = 85 + rand() % 45; if (rand() % 10 < 7) b = 90 + rand() % 30; return b * 2 * OLY_SCALE / 100; }
 static int winQ(int *m, int a, int b) { return m[0] > m[1] ? a : b; }
 void olyNew(void) {
+    olySpecial = 0;
     int pool[NATION_COUNT], n = 0;
     for (int i = 0; i < NATION_COUNT; i++) if (i != olyNation) pool[n++] = i;
     for (int i = n - 1; i > 0; i--) { int j = rand() % (i + 1), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
@@ -34,17 +37,17 @@ void olyAfterMatch(int p) {
         qf4[0] = opp; qf4[1] = p;                    // olyN[6] vs player
         sf1[0] = simScore(); do sf1[1] = simScore(); while (sf1[1] == sf1[0]);
         if (p <= opp) { olyOut = 1; olyFinished = 1; }
-        else { addCoins(REWARD[1]); olyCoins += REWARD[1]; olyRound = 2; }
+        else { int r = (olySpecial ? SPECIAL_REWARD : REWARD)[1]; addCoins(r); olyCoins += r; olyRound = 2; }
     } else if (olyRound == 2) {
         sf2[0] = opp; sf2[1] = p;                    // QF3 winner vs player
         if (p <= opp) { olyOut = 1; olyMedal = 1; olyFinished = 1; }
-        else { addCoins(REWARD[2]); olyCoins += REWARD[2]; olyRound = 3; }
+        else { int r = (olySpecial ? SPECIAL_REWARD : REWARD)[2]; addCoins(r); olyCoins += r; olyRound = 3; }
     } else {
         fin[0] = opp; fin[1] = p;                    // SF1 winner vs player
-        if (p > opp) { olyMedal = 3; addCoins(REWARD[3]); olyCoins += REWARD[3]; } else olyMedal = 2;
+        if (p > opp) { int r = (olySpecial ? SPECIAL_REWARD : REWARD)[3]; olyMedal = 3; addCoins(r); olyCoins += r; } else olyMedal = 2;
         olyFinished = 1;
     }
-    if (olyFinished) {
+    if (olyFinished && !olySpecial) {                // (Special Olympics medals don't count toward the real ones)
         if (olyMedal == 3) sv.gold++; else if (olyMedal == 2) sv.silver++; else if (olyMedal == 1) sv.bronze++;
         if (olyMedal) unlockAch(A_FIRST_MEDAL);
         if (olyMedal == 3) unlockAch(A_GOLD_MEDAL);
@@ -52,6 +55,27 @@ void olyAfterMatch(int p) {
     saveWrite();
 }
 int olyTournamentTotal(void) { return olyTotal; }
+// The website's SPECIAL OLYMPICS: if you don't win gold you can enter a second bracket made of
+// the nations knocked out of the main one (topped up with others), for smaller prizes.
+static void olySpecialNew(void) {
+    int pool[NATION_COUNT], n = 0, used[NATION_COUNT] = { 0 };
+    #define LOSER(m, a, b) do { if ((m)[0] >= 0) { int l = (m)[0] > (m)[1] ? (b) : (a); if (l != olyNation && !used[l]) { used[l] = 1; pool[n++] = l; } } } while (0)
+    int w1 = winQ(qf1, olyN[0], olyN[1]), w2 = winQ(qf2, olyN[2], olyN[3]), w3 = winQ(qf3, olyN[4], olyN[5]);
+    LOSER(qf1, olyN[0], olyN[1]); LOSER(qf2, olyN[2], olyN[3]); LOSER(qf3, olyN[4], olyN[5]); LOSER(qf4, olyN[6], olyN[7]);
+    LOSER(sf1, w1, w2); LOSER(sf2, w3, olyNation);
+    #undef LOSER
+    int extra[NATION_COUNT], ne = 0;
+    for (int i = 0; i < NATION_COUNT; i++) if (i != olyNation && !used[i]) extra[ne++] = i;
+    for (int i = ne - 1; i > 0; i--) { int j = rand() % (i + 1), t = extra[i]; extra[i] = extra[j]; extra[j] = t; }
+    for (int i = 0; n < 7 && i < ne; i++) pool[n++] = extra[i];
+    for (int i = n - 1; i > 0; i--) { int j = rand() % (i + 1), t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+    for (int i = 0; i < 7; i++) olyN[i] = pool[i];
+    olyN[7] = olyNation;
+    int *qs[3] = { qf1, qf2, qf3 };
+    for (int k = 0; k < 3; k++) { qs[k][0] = simScore(); do qs[k][1] = simScore(); while (qs[k][1] == qs[k][0]); }
+    qf4[0] = qf4[1] = sf1[0] = sf1[1] = sf2[0] = sf2[1] = fin[0] = fin[1] = -1;
+    olyRound = 1; olyOut = 0; olyMedal = 0; olyCoins = 0; olyTotal = 0; olyFinished = 0; olySpecial = 1;
+}
 
 // nation select: tap (or D-pad) to pick, tap the same one again (or A) to confirm
 static Btn natB[NATION_COUNT];
@@ -96,10 +120,10 @@ static void matchRow(int y, int a, int b, int *m, const char *lbl) {
     drawFlag(bufTop, 136, y + 1, 18, 12, b); text(bufTop, 158, y, CODE[b], b == olyNation ? YELLOW : WHITE, 1);
     if (m[1] >= 0) { sprintf(s, "%d", m[1] / 2); text(bufTop, 194, y, s, m[1] > m[0] ? LIME : GREY, 1); }
 }
-static Btn olyBtn[1]; static int olyBtnSel;
+static Btn olyBtn[2]; static int olyBtnSel, olyNB;
 void drawOlyBracket(void) {
     fillScreen(bufTop, DARK);
-    textC(bufTop, 2, "OLYMPIC BRACKET", GOLD, 1);
+    textC(bufTop, 2, olySpecial ? "SPECIAL OLYMPICS BRACKET" : "OLYMPIC BRACKET", olySpecial ? COL(31, 26, 9) : GOLD, 1);
     matchRow(20, olyN[0], olyN[1], qf1, "QF1"); matchRow(36, olyN[2], olyN[3], qf2, "QF2");
     matchRow(52, olyN[4], olyN[5], qf3, "QF3"); matchRow(68, olyN[6], olyN[7], qf4, "QF4");
     int w1 = winQ(qf1, olyN[0], olyN[1]), w2 = winQ(qf2, olyN[2], olyN[3]), w3 = winQ(qf3, olyN[4], olyN[5]);
@@ -112,16 +136,21 @@ void drawOlyBracket(void) {
     if (!olyFinished) {
         const char *r = olyRound == 1 ? "PLAY QUARTER-FINAL" : olyRound == 2 ? "PLAY SEMI-FINAL" : "PLAY THE FINAL";
         textC(bufBot, 30, olyRound == 1 ? "Beat your rival to reach the semis" : olyRound == 2 ? "Win to reach the final" : "Win it all for GOLD", WHITE, 1);
-        olyBtn[0] = (Btn){ 38, 70, 180, 40, "", 0, 0 }; strcpy(olyBtn[0].label, r);
+        olyBtn[0] = (Btn){ 38, 70, 180, 40, "", 0, 0 }; strcpy(olyBtn[0].label, r); olyNB = 1;
         sprintf(s, "coins won so far: %d", olyCoins); textC(bufBot, 130, s, GOLD, 1);
+        if (olySpecial) textC(bufBot, 146, "SPECIAL OLYMPICS: 1 / 2 / 3 coins a win", GREY, 1);
     } else {
         const char *m = olyMedal == 3 ? "GOLD MEDAL!" : olyMedal == 2 ? "SILVER MEDAL" : olyMedal == 1 ? "BRONZE MEDAL" : "KNOCKED OUT";
         u16 c = olyMedal == 3 ? GOLD : olyMedal == 2 ? COL(24, 24, 26) : olyMedal == 1 ? COL(26, 15, 7) : RED;
         textC(bufBot, 16, m, c, 2);
         sprintf(s, "coins won: %d", olyCoins); textC(bufBot, 52, s, GOLD, 1);
-        olyBtn[0] = (Btn){ 38, 80, 180, 40, "CONTINUE", 0, 0 };
+        if (olyMedal != 3 && !olySpecial) {          // didn't win gold: a second chance in the Special Olympics
+            olyBtn[0] = (Btn){ 28, 74, 200, 36, "PLAY SPECIAL OLYMPICS", 0, 0 };
+            olyBtn[1] = (Btn){ 58, 118, 140, 32, "CONTINUE", 0, 0 }; olyNB = 2;
+        } else { olyBtn[0] = (Btn){ 38, 80, 180, 40, "CONTINUE", 0, 0 }; olyNB = 1; }
     }
-    drawBtns(bufBot, olyBtn, 1, olyBtnSel);
+    if (olyBtnSel >= olyNB) olyBtnSel = 0;
+    drawBtns(bufBot, olyBtn, olyNB, olyBtnSel);
     textC(bufBot, 170, "B  quit the tournament", GREY, 1);
 }
 
@@ -129,7 +158,11 @@ void drawOlyBracket(void) {
 void inputOlyBracket(int down, int tx, int ty) {
     (void)tx; (void)ty;
     if (down & KEY_B) { goScreen(S_TITLE); return; }
-    if (btnInput(olyBtn, 1, &olyBtnSel, 1) == 0) { if (olyFinished) olympicsDone(); else startOlympicMatch(); }
+    int h = btnInput(olyBtn, olyNB ? olyNB : 1, &olyBtnSel, 1);
+    if (h < 0) return;
+    if (!olyFinished) startOlympicMatch();
+    else if (olyNB == 2 && h == 0) { trackGameEnd(0); saveWrite(); olySpecialNew(); olyBtnSel = 0; goScreen(S_OLY_BRACKET); }   // on to the Special Olympics
+    else olympicsDone();
 }
 
 // ══ SLOT MACHINE ══════════════════════════════════════════════════════════

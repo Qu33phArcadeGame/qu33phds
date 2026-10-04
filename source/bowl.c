@@ -102,11 +102,29 @@ static void rackPins(void) {
     for (int i = 0; i < 10; i++) pins[i] = (Pin){ LAYOUT[i][0], HEAD_Y + LAYOUT[i][1] * ROW_D, 0, 0, 0, 0, 0, PIN_COL[i], 0, 0 };
 }
 static int standing(void) { int n = 0; for (int i = 0; i < 10; i++) if (!pins[i].gone && !pins[i].down) n++; return n; }
+// A WASHOUT is a split that includes the head pin: after the first ball the head pin is still up
+// and the pins left standing are in separate groups with a gap between them (1-2-10, 1-2-4-10,
+// 1-3-7, 1-3-6-7...). Pins next to each other (same row, or one row apart and touching) count as
+// one group, so leaves like 1-2-4 or 1-3-6 (all touching) are NOT washouts.
+static const u16 PIN_ADJ[10] = {                 // neighbours of each pin (bit k = pin k+1)
+    (1 << 1) | (1 << 2),                                  // 1: 2 3
+    (1 << 0) | (1 << 2) | (1 << 3) | (1 << 4),            // 2: 1 3 4 5
+    (1 << 0) | (1 << 1) | (1 << 4) | (1 << 5),            // 3: 1 2 5 6
+    (1 << 1) | (1 << 4) | (1 << 6) | (1 << 7),            // 4: 2 5 7 8
+    (1 << 1) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 7) | (1 << 8),   // 5: 2 3 4 6 8 9
+    (1 << 2) | (1 << 4) | (1 << 8) | (1 << 9),            // 6: 3 5 9 10
+    (1 << 3) | (1 << 7),                                  // 7: 4 8
+    (1 << 3) | (1 << 4) | (1 << 6) | (1 << 8),            // 8: 4 5 7 9
+    (1 << 4) | (1 << 5) | (1 << 7) | (1 << 9),            // 9: 5 6 8 10
+    (1 << 5) | (1 << 8) };                                // 10: 6 9
 static int isWashout(void) {
-    if (pins[0].down) return 0;
-    int l = 0, r = 0;
-    for (int i = 1; i < 10; i++) { Pin *p = &pins[i]; if (p->gone || p->down) continue; if (p->X < -0.001f) l = 1; else if (p->X > 0.001f) r = 1; }
-    return l && r;
+    if (rollNo != 0 || pins[0].gone || pins[0].down) return 0;     // only on the first ball, head pin up
+    u16 up = 0; int n = 0;
+    for (int i = 0; i < 10; i++) if (!pins[i].gone && !pins[i].down) { up |= 1 << i; n++; }
+    if (n < 2) return 0;
+    u16 seen = 1, grow = 1;                                          // flood out from the head pin
+    while (grow) { u16 nxt = 0; for (int i = 0; i < 10; i++) if (grow & (1 << i)) nxt |= PIN_ADJ[i] & up & ~seen; seen |= nxt; grow = nxt; }
+    return seen != up;                                               // some standing pin is cut off by a gap
 }
 static int scoreTotal(void) {
     int s = 0, i = 0;
