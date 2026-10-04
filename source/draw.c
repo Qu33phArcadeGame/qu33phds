@@ -508,6 +508,7 @@ static const u16 MK_COLS[3] = { COL(31, 7, 7), COL(7, 29, 9), COL(9, 14, 31) };
 // every pass re-rotated the sprite: up to 17 full rotations per marker per frame in NEON.
 #define FXMAX 96
 static u16 fxBuf[FXMAX * FXMAX];
+u16 gTouchGlow;                                   // when set: a glow in this colour (markers touching)
 FAST static int rotToScratch(const u16 *spr, int w, int h, float ang, float scale) {
     float inv = 1.0f / scale;
     int ci = (int)(fcos(ang) * inv * 65536.0f), si = (int)(fsin(ang) * inv * 65536.0f);
@@ -532,12 +533,12 @@ FAST static void stamp(int cx, int cy, int r, u16 col, int stip) {     // col 0 
 }
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col) {
     int neon = sv.theme == 4, cart = sv.theme == 1 && col >= 0;
-    if (!neon && !gGlowShop && !cart) { blitCore(spr, w, h, cx, cy, ang, scale); return; }   // plain: one pass, as before
+    if (!neon && !gGlowShop && !cart && !gTouchGlow) { blitCore(spr, w, h, cx, cy, ang, scale); return; }   // plain: one pass, as before
     if (scale <= 0.01f) return;
     int r = rotToScratch(spr, w, h, ang, scale);
     if (r < 0) { blitCore(spr, w, h, cx, cy, ang, scale); return; }                          // (too big for the scratch: plain)
-    if (neon || gGlowShop) {
-        u16 g = neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20)), dim = mix(g, BLACK, 1, 2);
+    if (neon || gGlowShop || gTouchGlow) {
+        u16 g = gTouchGlow ? gTouchGlow : neon ? COL(8, 31, 15) : (col >= 0 ? mix(MK_COLS[col], WHITE, 1, 2) : COL(31, 31, 20)), dim = mix(g, BLACK, 1, 2);
         static const signed char R3[12][2] = { {-3,0},{3,0},{0,-3},{0,3},{-2,-2},{2,-2},{-2,2},{2,2},{-3,-1},{3,1},{-1,3},{1,-3} };
         for (int k = 0; k < 12; k++) stamp(cx + R3[k][0], cy + R3[k][1], r, dim, 1);
         for (int k = 0; k < 4; k++) stamp(cx + (k == 0) - (k == 1), cy + (k == 2) - (k == 3), r, g, 0);

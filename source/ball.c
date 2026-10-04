@@ -293,7 +293,7 @@ void inputBall(void) {
     }
     if (dragging && (kUp & KEY_TOUCH)) {
         dragging = 0;
-        float up = (dsy - dny) / 380.0f, dx = (dnx - dsx) / BW;
+        float up = (dsy - dny) / 175.0f, dx = (dnx - dsx) / BW;          // a flick of about half the screen is full power (reaches the top holes)
         if (up >= 0.04f && canRoll()) roll(up / M()->pullDiv, dx / M()->aimDiv);
     }
     // buttons: aim with left/right, hold A (the power marker grows and shrinks), let go to roll

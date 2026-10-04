@@ -19,7 +19,7 @@
 #define MW 29.0f                                   // WW*0.115
 #define PLATE_W 102.0f                             // WW*0.40
 #define PLATE_Y 346.0f                             // CH*0.90
-#define GRAV 820.0f                                // px/s^2: about twice the website's pull, so the DS plays snappier
+#define GRAV 1050.0f                                // px/s^2: about twice the website's pull, so the DS plays snappier
 #define LOOSE 4                                    // how many of the top placed markers stay loose
 #define MAXB 160
 

@@ -334,8 +334,12 @@ static void drawWorld(void) {
         // outline in the marker's colour
         const u16 *s; int w, h; markerSprite(m->col, &s, &w, &h);
         gGlowShop = shopActive(SH_GLOW);
+        // touching another marker: a pulsing gold glow, so you can see the touch that scores
+        int touch = 0;
+        if (!m->fallen) for (int j = 0; j < current; j++) if (j != i && !mk[j].fallen && touching(m, &mk[j])) touch = 1;
+        if (touch) { int pz = (frameCount >> 2) & 7; pz = pz < 4 ? pz : 7 - pz; gTouchGlow = COL(31, 22 + pz * 2, 4 + pz * 3); }
         drawMarkerFx(s, w, h, wsx(m->x), wsy(m->y), m->rot, 1.0f, m->col == 0 ? 1 : m->col == 1 ? 0 : 2);
-        gGlowShop = 0;
+        gGlowShop = 0; gTouchGlow = 0;
     }
     if (current < 3 && (charging || chargeT > 0)) {   // the power marker grows out of the launch spot
         float len = charging ? (40 + power * 150) * K : 40 * K;

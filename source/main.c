@@ -471,6 +471,10 @@ static void drawHandoff(void) {
 }
 
 // ── main loop ─────────────────────────────────────────────────────────────
+// frames really shown: counted by the screen's own refresh (60 a second). If a busy frame takes
+// longer than 1/60 s, the games catch up by running extra steps, so they keep full speed.
+static volatile int vbCount; static int vbLast;
+static void vbIrq(void) { vbCount++; }
 int main(void) {
     videoSetMode(MODE_5_2D); videoSetModeSub(MODE_5_2D);
     vramSetBankA(VRAM_A_MAIN_BG); vramSetBankC(VRAM_C_SUB_BG);
@@ -479,12 +483,17 @@ int main(void) {
     vramBot = bgGetGfxPtr(bgm); vramTop = bgGetGfxPtr(bgs);
     lcdMainOnBottom();
     soundEnable();
+    irqSet(IRQ_VBLANK, vbIrq); irqEnable(IRQ_VBLANK);
+    if (isDSiMode()) setCpuClock(true);       // on a DSi / 3DS running in DSi mode: double the CPU speed (134 MHz)
     saveInit(); applyTheme();
     srand(0x51A);
     musicStart();
 
     while (1) {
         frameCount++;
+        int vbNow = vbCount, steps = vbNow - vbLast; vbLast = vbNow;
+        if (steps < 1) steps = 1;
+        if (steps > 3) steps = 3;                                   // (never more than 3 catch-up steps)
         scanKeys();
         kDown = keysDown(); kHeld = keysHeld(); kUp = keysUp();
         touchPosition t; touchRead(&t); tX = t.px; tY = t.py;
@@ -495,7 +504,7 @@ int main(void) {
                 if (kDown & KEY_START) { screen = S_PAUSE; break; }
                 if (kDown & KEY_X) musicToggle();
                 if (kDown & KEY_Y) sv.sfxOn = !sv.sfxOn;
-                matchInput(kDown, kHeld, kUp, tX, tY); matchUpdate();
+                matchInput(kDown, kHeld, kUp, tX, tY); for (int k = 0; k < steps && !matchOver; k++) matchUpdate();
                 if (matchOver) matchFinished();
                 break;
             case S_PAUSE:
@@ -517,33 +526,33 @@ int main(void) {
             case S_NAME: inputName(); break;
             case S_ARCADE: inputArcade(); break;
             case S_MINI_MENU: inputMiniMenu(); break;
-            case S_MINI: case S_MINI_PAUSE: inputMini(); if (screen == S_MINI) updateMini(); break;
+            case S_MINI: case S_MINI_PAUSE: inputMini(); for (int k = 0; k < steps && screen == S_MINI; k++) updateMini(); break;
             case S_MINI_OVER: inputMiniOver(); break;
             case S_BALL_MENU: inputBallMenu(); break;
-            case S_BALL: case S_BALL_PAUSE: inputBall(); if (screen == S_BALL) updateBall(); break;
+            case S_BALL: case S_BALL_PAUSE: inputBall(); for (int k = 0; k < steps && screen == S_BALL; k++) updateBall(); break;
             case S_BALL_OVER: inputBallOver(); break;
             case S_FIDGET_MENU: inputFidgetMenu(); break;
-            case S_FIDGET: case S_FIDGET_PAUSE: inputFidget(); if (screen == S_FIDGET) updateFidget(); break;
+            case S_FIDGET: case S_FIDGET_PAUSE: inputFidget(); for (int k = 0; k < steps && screen == S_FIDGET; k++) updateFidget(); break;
             case S_FIDGET_OVER: inputFidgetOver(); break;
             case S_COINREC: inputCoinRecord(); break;
             case S_BOWL_MENU: inputBowlMenu(); break;
-            case S_BOWL: case S_BOWL_PAUSE: inputBowl(); if (screen == S_BOWL) updateBowl(); break;
+            case S_BOWL: case S_BOWL_PAUSE: inputBowl(); for (int k = 0; k < steps && screen == S_BOWL; k++) updateBowl(); break;
             case S_BOWL_OVER: inputBowlOver(); break;
             case S_STACK_MENU: inputStackMenu(); break;
-            case S_STACK: case S_STACK_PAUSE: inputStack(); if (screen == S_STACK) updateStack(); break;
+            case S_STACK: case S_STACK_PAUSE: inputStack(); for (int k = 0; k < steps && screen == S_STACK; k++) updateStack(); break;
             case S_STACK_OVER: inputStackOver(); updateStack(); break;
             case S_FLIP_MENU: inputFlipMenu(); break;
             case S_FLIP_LEVELS: inputFlipLevels(); break;
-            case S_FLIP: case S_FLIP_PAUSE: inputFlip(); if (screen == S_FLIP) updateFlip(); break;
+            case S_FLIP: case S_FLIP_PAUSE: inputFlip(); for (int k = 0; k < steps && screen == S_FLIP; k++) updateFlip(); break;
             case S_FLIP_OVER: inputFlipOver(); break;
             case S_DOZER_MENU: inputDozerMenu(); break;
-            case S_DOZER: case S_DOZER_PAUSE: inputDozer(); if (screen == S_DOZER) updateDozer(); break;
+            case S_DOZER: case S_DOZER_PAUSE: inputDozer(); for (int k = 0; k < steps && screen == S_DOZER; k++) updateDozer(); break;
             case S_DOZER_OVER: inputDozerOver(); updateDozer(); break;
             case S_PIN_MENU: inputPinMenu(); break;
-            case S_PIN: case S_PIN_PAUSE: inputPin(); if (screen == S_PIN) updatePin(); break;
+            case S_PIN: case S_PIN_PAUSE: inputPin(); for (int k = 0; k < steps && screen == S_PIN; k++) updatePin(); break;
             case S_PIN_OVER: inputPinOver(); break;
             case S_JUMP_MENU: inputJumpMenu(); break;
-            case S_JUMP: case S_JUMP_PAUSE: inputJump(); if (screen == S_JUMP) updateJump(); break;
+            case S_JUMP: case S_JUMP_PAUSE: inputJump(); for (int k = 0; k < steps && screen == S_JUMP; k++) updateJump(); break;
             case S_JUMP_OVER: inputJumpOver(); break;
             case S_JUMP_CHARS: inputJumpChars(); break;
         }

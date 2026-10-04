@@ -201,11 +201,11 @@ void updateDozer(void) {
     if (chairOn && chairT < 1) { chairT += dt * 2.2f; if (chairT > 1) chairT = 1; }
     if (tLeft <= 0) { tLeft = 0; endGame(); return; }
     if (refillFr <= 0) { int nc = 0; for (int i = 0; i < nI; i++) nc += it[i].coin; if (nc < 5) doRefill(); }
-    pzPhase += dt * 2.0f; pzPrev = pz;                               // (the website's 1.55, quickened for the DS)
+    pzPhase += dt * 2.7f; pzPrev = pz;                               // (the website's 1.55, quickened for the DS)
     pz = PZ_MIN + (int)((PZ_MAX - PZ_MIN) * (0.5f - 0.5f * fcos(pzPhase)));
     int pSpeed = pz - pzPrev > 0 ? pz - pzPrev : 0, dpz = pz - pzPrev;
     if (dropping) {
-        dropT += dt * 2.6f;
+        dropT += dt * 4.2f;                                   // markers drop through quicker
         if (dropT >= 1) {
             int landV = fmul(MK_RAD, F(1.2)) + fmul(MK_H, F(0.2));
             Item *m = addMarker(F(dragU), landV, dropCol, dropRot);

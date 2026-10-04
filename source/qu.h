@@ -241,6 +241,7 @@ void drawJump(void); void inputJump(void); void updateJump(void);
 void drawJumpOver(void); void inputJumpOver(void); void drawJumpChars(void); void inputJumpChars(void);
 extern int gStip; extern u16 gSil; extern int gGlowShop;
 void blitScaled(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh);
+extern u16 gTouchGlow;
 void blitScaledR90(const u16 *spr, int w, int h, int cx, int cy, int dw, int dh);
 void drawMarkerFx(const u16 *spr, int w, int h, int cx, int cy, float ang, float scale, int col);                // 1 = draw sprites see-through (every other pixel)
 

@@ -215,7 +215,9 @@ static void land(int i) {
     if (flMode == M_LEVELS) { if (i >= nP - 1) finishLevel(); }
     else { while (nP < mk.pIdx + 11 && nP < MAXP) addPlatform(); trimEndless(); }
 }
-void updateFlip(void) {
+static void flipStep(void);
+void updateFlip(void) { flipStep(); if (state == ST_FLYING || state == ST_BOOST || state == ST_TIP) flipStep(); }   // flights run at double speed
+static void flipStep(void) {
     fFrames++;
     if (state == ST_OVER) return;
     if (settle > 0) settle--;
@@ -238,6 +240,14 @@ void updateFlip(void) {
     for (int i = 0; i < 6; i++) if (pops[i].life > 0) { pops[i].life--; pops[i].y -= CH * 0.0012f; }
 }
 
+// the stylus: a flick's power comes from its speed OR its length (whichever is more), so a
+// short quick flick and a long smooth drag both work on the DS's small screen
+static void flickVals(float dx, float dy, float dist, float dt, float *p, float *am, float *lf) {
+    float sp = dist / dt, a = sp / (WW * 0.0030f), b = dist / (WW * 0.42f), q = a > b ? a : b;
+    *p = q < 0.10f ? 0.10f : q > 1 ? 1 : q;
+    *am = dx / (WW * 0.30f); if (*am < -1) *am = -1; if (*am > 1) *am = 1;
+    *lf = (-dy) / (CH * 0.12f) + 0.55f; if (*lf < 0.35f) *lf = 0.35f; if (*lf > 1.35f) *lf = 1.35f;
+}
 // ── input ─────────────────────────────────────────────────────────────────
 void inputFlip(void) {
     if (screen == S_FLIP_PAUSE) {
@@ -257,9 +267,7 @@ void inputFlip(void) {
         dragging = 0;
         float dx = dnx - dsx, dy = dny - dsy, dist = fsqrt(dx * dx + dy * dy), dt = (fFrames - dT0) * 16.67f; if (dt < 40) dt = 40;
         if (dist >= WW * 0.03f) {
-            float sp = dist / dt, p = sp / (WW * 0.0042f); p = p < 0.10f ? 0.10f : p > 1 ? 1 : p;
-            float am = dx / (WW * 0.35f); am = am < -1 ? -1 : am > 1 ? 1 : am;
-            float lf = (-dy) / (CH * 0.16f) + 0.55f; lf = lf < 0.35f ? 0.35f : lf > 1.35f ? 1.35f : lf;
+            float p, am, lf; flickVals(dx, dy, dist, dt, &p, &am, &lf);
             flip(p, am, lf);
         }
         return;
@@ -339,12 +347,16 @@ void drawFlip(void) {
     char s[32];
     drawBg();
     for (int i = 0; i < nP; i++) drawPad(&P[i]);
-    if (state == ST_READY && !dragging) {                     // button play: where it's aimed
-        float p = charging ? power : 0.5f;
+    if (state == ST_READY) {                                  // where it'll go: the stylus drag or the buttons
+        float p = charging ? power : 0.5f, am = aim, lf = lift;
+        if (dragging) { float dx = dnx - dsx, dy = dny - dsy, dt = (fFrames - dT0) * 16.67f; if (dt < 40) dt = 40;
+            if (dx * dx + dy * dy < 36) goto noArc; flickVals(dx, dy, fsqrt(dx * dx + dy * dy), dt, &p, &am, &lf); }
+        float aim = am, lift = lf;
         float vx = (0.008f + p * 0.014f) * WW * (0.55f + 0.75f * (aim + 0.5f > 0 ? aim + 0.5f : 0)), vy = -(0.026f + p * 0.012f) * CH * lift;
         float x = mk.x, y = mk.y - MH * 0.5f;
-        for (int k = 0; k < 40; k++) { x += vx; vy += G; y += vy; if (k % 3 == 0) grect((int)SX(x) - 1, (int)SY(y) - 1, 2, 2, charging ? COL(31, 27, 4) : COL(24, 24, 24)); }
+        for (int k = 0; k < 40; k++) { x += vx; vy += G; y += vy; if (k % 3 == 0) grect((int)SX(x) - 1, (int)SY(y) - 1, 2, 2, (charging || dragging) ? COL(31, 27, 4) : COL(24, 24, 24)); }
     }
+    noArc:
     drawMk();
     for (int i = 0; i < 6; i++) if (pops[i].life > 0) gtext((int)SX(pops[i].x) - textW(pops[i].txt, 1) / 2, (int)SY(pops[i].y), pops[i].txt, pops[i].col, 1);
     // HUD on the top screen
