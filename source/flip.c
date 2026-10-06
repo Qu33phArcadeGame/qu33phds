@@ -280,7 +280,7 @@ void inputFlip(void) {
     if (kHeld & KEY_DOWN)  { lift -= 0.02f; if (lift < 0.35f) lift = 0.35f; }
     if (kDown & KEY_A) { charging = 1; ph = 0; }
     if (charging) {
-        ph++; float p = (ph % 64) / 32.0f; power = p < 1 ? p : 2 - p; if (power < 0.1f) power = 0.1f;
+        ph++; float p = (ph % 44) / 22.0f; power = p < 1 ? p : 2 - p; if (power < 0.1f) power = 0.1f;
         if (kDown & KEY_B) charging = 0;
         else if (kUp & KEY_A) { charging = 0; flip(power, aim, lift); }
     }

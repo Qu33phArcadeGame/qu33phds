@@ -315,7 +315,7 @@ void inputBowl(void) {
         }
         if (kDown & KEY_A) { charging = 1; ph = 0; }
         if (charging) {
-            ph++; float p = (ph % 64) / 32.0f; p = p < 1 ? p : 2 - p; power = 0.35f + p;
+            ph++; float p = (ph % 44) / 22.0f; p = p < 1 ? p : 2 - p; power = 0.35f + p;
             if (kDown & KEY_B) charging = 0;
             else if (kUp & KEY_A) {                        // holding left/right as you let go adds hook
                 charging = 0;

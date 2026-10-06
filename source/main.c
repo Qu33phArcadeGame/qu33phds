@@ -616,12 +616,17 @@ int main(void) {
             case S_JUMP_CHARS: drawJumpChars(); break;
         }
         drawToast();
-        // hand both finished frames to the screens: flush them out of the CPU's cache first
-        // (DMA reads memory directly), then copy 32 bits at a time during the blank
-        DC_FlushRange(bufTop, sizeof bufTop); DC_FlushRange(bufBot, sizeof bufBot);
+        // Hand both finished frames to the screens. The copy (192 KB) used to keep the CPU waiting
+        // for over half a frame on an original DS; now the DMA copies this pair in the background
+        // while the CPU gets on with the next frame in the other pair. First the CPU's cache is
+        // written out (DMA reads memory directly): flushing the whole 8 KB cache is far quicker
+        // than walking 192 KB of frame line by line.
+        DC_FlushAll();
         swiWaitForVBlank();
-        dmaCopyWords(3, bufTop, vramTop, sizeof bufTop);
-        dmaCopyWords(3, bufBot, vramBot, sizeof bufBot);
+        while (dmaBusy(3) || dmaBusy(2)) ;                       // (last frame's copy: long finished by now)
+        dmaCopyWordsAsynch(3, bufTop, vramTop, SCREEN_BYTES);
+        dmaCopyWordsAsynch(2, bufBot, vramBot, SCREEN_BYTES);
+        bufSwap();
     }
     return 0;
 }

@@ -391,7 +391,7 @@ void inputMini(void) {
         if (kDown & KEY_A) { charging = 1; ph = 0; power = 0; }
     }
     if (charging) {
-        ph++; float p = (ph % 64) / 32.0f; power = p < 1 ? p : 2 - p;
+        ph++; float p = (ph % 44) / 22.0f; power = p < 1 ? p : 2 - p;
         chargeT = 90;
         if (kDown & KEY_B) charging = 0;
         else if (kUp & KEY_A) { charging = 0; if (canThrow()) launch(power, aimA); }

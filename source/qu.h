@@ -106,7 +106,9 @@ u16  themeTint(u16 p, int t);    // one pixel through theme t's colour grade
 extern const u16 *fieldPix;      // the field strip the game draws, built from the 256-colour photo per theme
 
 // ── drawing (draw.c) ──────────────────────────────────────────────────────
-extern u16 bufTop[SW * SH], bufBot[SW * SH];
+extern u16 *bufTop, *bufBot;          // the pair of screens being drawn this frame
+void bufSwap(void);                    // (draw.c) switch to the other pair
+#define SCREEN_BYTES (SW * SH * 2)
 void gpx(int x, int gy, u16 c);
 extern int gClipLo, gClipHi;
 void grect(int x, int gy, int w, int h, u16 c);

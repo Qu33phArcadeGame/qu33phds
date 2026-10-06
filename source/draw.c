@@ -1,7 +1,11 @@
 // draw.c — screens, sprites, text, buttons, flags
 #include "qu.h"
 
-u16 bufTop[SW * SH] __attribute__((aligned(32))), bufBot[SW * SH] __attribute__((aligned(32)));
+// Two pairs of frame buffers: the game draws into one pair while the other, finished last frame,
+// is copied to the screens in the background (see the end of the main loop).
+static u16 bufs[2][2][SW * SH] __attribute__((aligned(32)));
+u16 *bufTop = bufs[0][0], *bufBot = bufs[0][1];
+void bufSwap(void) { static int k; k ^= 1; bufTop = bufs[k][0]; bufBot = bufs[k][1]; }
 
 // ── maths (the DS has no floating-point hardware: keep these light) ──────
 float fsqrt(float v) {                         // bit-trick first guess + 3 Newton steps (was 12)
@@ -345,24 +349,29 @@ void drawBtns(u16 *buf, Btn *b, int n, int sel) {
         squeeze = 0;
     }
 }
-// The power marker: a marker pointing where the throw goes, growing with power and filling
-// from white through gold to red. (x0,gy0) is the back of the cap, (ux,uy) the direction.
+// The website's power marker: a black marker with a thick white outline and a narrower cap
+// block on the front end, pointing where the throw goes. It grows with power, and the body
+// fills from the back with the power's colour (white through gold to red).
+// (x0,gy0) is the back end, (ux,uy) the direction.
+static int inRR(int i, int j, int x, int y, int w, int h, int r) {   // inside a rounded rectangle?
+    if (i < x || i >= x + w || j < y || j >= y + h) return 0;
+    int dx = i < x + r ? x + r - i : i >= x + w - r ? i - (x + w - r - 1) : 0;
+    int dy = j < y + r ? y + r - j : j >= y + h - r ? j - (y + h - r - 1) : 0;
+    return dx * dx + dy * dy <= r * r;
+}
 void powerMarker(int x0, int gy0, float ux, float uy, float len, float power) {
-    static u16 spr[200 * 14];
-    int L = (int)len; if (L < 24) L = 24; if (L > 200) L = 200;
-    int H = 14, cap = 10, nib = 9;
+    static u16 spr[200 * 18];
+    int L = (int)len; if (L < 26) L = 26; if (L > 200) L = 200;
+    const int H = 18, ol = 2, capL = 13, capW = 14, r = 4;
+    int bodyL = L - capL + ol, fillL = power > 0 ? (int)((bodyL - 2 * ol) * power + 1) : 0;
     int pr = (int)(power * 31);
-    u16 fill = power <= 0 ? COL(5, 5, 5) : COL(31, 31 - pr * 2 / 3, pr < 16 ? 31 - pr * 2 : 0);
-    btnGrad();
+    u16 fill = COL(31, 31 - pr * 2 / 3, pr < 16 ? 31 - pr * 2 : 0), ink = COL(1, 1, 1);
     for (int j = 0; j < H; j++) for (int i = 0; i < L; i++) {
-        u16 c = 0; int dy = j - H / 2; if (dy < 0) dy = -dy - 1;
-        if (i >= L - nib) {                                  // the nib: a point
-            int half = (L - 1 - i) * (H / 2) / nib;
-            if (dy <= half) c = dy >= half - 1 ? WHITE : (power > 0 ? fill : COL(10, 10, 10));
-            if (i >= L - 3 && dy <= 1) c = COL(31, 28, 6);
-        } else if (i < cap) {                                // the cap, rounded at the back
-            int in = inset(j, H, 6); if (i >= in) c = (i == in || j < 2 || j >= H - 2 || i == cap - 1) ? WHITE : BTN_GRAD[j * 32 / H];
-        } else c = (j < 2 || j >= H - 2) ? WHITE : (power > 0 && (i - cap) < (L - nib - cap) * power + 1 ? fill : BTN_GRAD[j * 32 / H]);
+        u16 c = 0;
+        if (inRR(i, j, L - capL, (H - capW) / 2, capL, capW, 1))                       // the cap, over the body's end
+            c = inRR(i, j, L - capL + ol, (H - capW) / 2 + ol, capL - 2 * ol, capW - 2 * ol, 0) ? ink : WHITE;
+        else if (inRR(i, j, 0, 0, bodyL, H, r))                                          // the body
+            c = inRR(i, j, ol, ol, bodyL - 2 * ol, H - 2 * ol, r - 1) ? (i - ol < fillL ? fill : ink) : WHITE;
         spr[j * L + i] = c ? (c | 0x8000) : 0;
     }
     float cx = x0 + ux * L / 2, cy = gy0 + uy * L / 2;

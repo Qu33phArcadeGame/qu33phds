@@ -288,7 +288,7 @@ void matchInput(int down, int held, int up, int tx, int ty) {
     if (aimAng > -0.55f) aimAng = -0.55f;
     if (down & KEY_A) { charging = 1; power = 0; ph = 0; }
     if (charging) {
-        ph++; float p = (ph % 64) / 32.0f; power = p < 1 ? p : 2 - p;    // full in about half a second
+        ph++; float p = (ph % 30) / 15.0f; power = p < 1 ? p : 2 - p;    // full in a quarter of a second
         chargeT = 90;
         if (down & KEY_B) charging = 0;
         else if (up & KEY_A) { charging = 0; float pw = 70 + power * 180; throwMarker(fcos(aimAng) * pw, fsin(aimAng) * pw); }
@@ -351,8 +351,8 @@ static void drawWorld(void) {
 }
 void matchDraw(void) {
     int tp = (int)topPx;
-    memcpy(bufTop, fieldPix + tp * SW, sizeof bufTop);
-    memcpy(bufBot, fieldPix + BOT_PX * SW, sizeof bufBot);
+    memcpy(bufTop, fieldPix + tp * SW, SCREEN_BYTES);
+    memcpy(bufBot, fieldPix + BOT_PX * SW, SCREEN_BYTES);
     // draw everything in the field twice: once with the top screen's scroll (clipped to it),
     // once with the fixed bottom screen's (clipped to it), so markers cross the gap correctly
     for (int pass = 0; pass < 2; pass++) {

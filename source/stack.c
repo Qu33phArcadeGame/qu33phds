@@ -123,8 +123,12 @@ static float physGrav = GRAV;
 FAST static void step(float dt) {
     // broad phase: only pairs with a loose body, whose boxes come near each other
     memcpy(arbsOld, arbs, sizeof(Arb) * nArb); nArbOld = nArb; nArb = 0;
+    // (the same pairs as before, found faster: a pair needs a loose body, and only a handful are
+    //  loose, so loop over those instead of every pair of up to 160 bodies)
+    static u8 loose[MAXB];
+    for (int i = 0; i < nB; i++) loose[i] = B[i].used && B[i].invM != 0;
     for (int i = 0; i < nB; i++) { Body *a = &B[i]; if (!a->used) continue;
-        for (int j = i + 1; j < nB; j++) { Body *b = &B[j]; if (!b->used || (a->invM == 0 && b->invM == 0)) continue;
+        for (int j = i + 1; j < nB; j++) { if (!loose[i] && !loose[j]) continue; Body *b = &B[j]; if (!b->used) continue;
             float ra = a->hw + a->hh, rb = b->hw + b->hh;
             if (fabs_(a->p.x - b->p.x) > ra + rb || fabs_(a->p.y - b->p.y) > ra + rb) continue;
             Contact cs[2]; int n = collide(cs, a, b);
