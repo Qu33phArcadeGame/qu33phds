@@ -13,6 +13,8 @@
 #include "assets_mini.h"
 #include "assets_ball.h"
 
+void miniNearThemeChanged(void);   // defined with the mini palettes below
+
 // ══ ARCADE MENU ═══════════════════════════════════════════════════════════
 static const char *ARC_NAME[ARC_COUNT] = { "MINI QU33PH", "QU33PH-BALL", "FIDGET", "BOWLING", "STACK", "FLIP", "DOZER", "JUMP", "PINBALL" };
 static const int ARC_READY[ARC_COUNT] = { 1, 1, 1, 1, 1, 1, 1, 1, 1 };
