@@ -90,7 +90,7 @@ void inputArcade(void) {
     kDown = keep; arcSel = s;
     if (k == 9) { goScreen(S_TITLE); return; }
     int h = k >= 0 && k < 9 ? SLOT_GAME[k] : -1;
-    if (h == ARC_MINI) { if (pakUse(MINI_PAK, MINI_PAK_SIZE, MINI_PAK_ID)) { miniThemeChanged(); goScreen(S_MINI_MENU); } else arcErrT = 240; }
+    if (h == ARC_MINI) { if (pakUse(MINI_PAK, MINI_PAK_SIZE, MINI_PAK_ID)) { miniThemeChanged(); miniNearThemeChanged(); goScreen(S_MINI_MENU); } else arcErrT = 240; }
     if (h == ARC_BALL) { if (ballEnter()) goScreen(S_BALL_MENU); else arcErrT = 240; }
     if (h == ARC_JUMP) { if (jumpEnter()) goScreen(S_JUMP_MENU); else arcErrT = 240; }
     if (h == ARC_PINBALL) { if (pinEnter()) goScreen(S_PIN_MENU); else arcErrT = 240; }
@@ -110,6 +110,16 @@ void inputArcade(void) {
 #define SLOPE   0.3414f
 #define VCX     0.4968f
 #define LANE_AR 4.0f
+// the near-end photo (VIEW.near in mini.html): the bottom screen's table. The camera
+// never moves it — you aim and throw from here, and the top screen does the travelling.
+#define N_INV_A   2.083f
+#define N_INV_B   1.748f
+#define N_HW0     0.2866f
+#define N_FY0     0.042f
+#define N_SLOPE   0.2292f
+#define N_VCX     0.4965f
+#define N_PH      308
+#define N_OFF     82
 #define V_DESTINY 0.5f                 // the seam between the first two tables
 #define V_WALL  1.0f
 #define WALL_BOUNCE 0.42f
@@ -134,10 +144,12 @@ static int matchSecs = 60, sudden, score, turnPts, turn, coinsWon, newBest;
 static float tLeft, suddenAt, turnPause, aimU = 0.5f, aimA, shakeT, shakeAmt;
 static int shX, shY;
 static u16 palT[256];                  // the table's palette through the current theme
+static u16 palN[256];                  // the near table's palette through the current theme
 
 void miniThemeChanged(void) { for (int i = 0; i < 256; i++) palT[i] = themeTint(mini_pal[i], sv.theme); }
+void miniNearThemeChanged(void) { for (int i = 0; i < 256; i++) palN[i] = themeTint(mini_near_pal[i], sv.theme); }
 // the theme changed: recolour whichever arcade game is loaded (the others recolour when opened)
-void arcadeThemeChanged(void) { if (pakIs(MINI_PAK)) miniThemeChanged(); if (pakIs(BALL_PAK)) ballThemeChanged(); fidgetThemeChanged(); bowlThemeChanged(); stackThemeChanged(); flipThemeChanged(); dozerThemeChanged(); pinThemeChanged(); }
+void arcadeThemeChanged(void) { if (pakIs(MINI_PAK)) { miniThemeChanged(); miniNearThemeChanged(); } if (pakIs(BALL_PAK)) ballThemeChanged(); fidgetThemeChanged(); bowlThemeChanged(); stackThemeChanged(); flipThemeChanged(); dozerThemeChanged(); pinThemeChanged(); }
 
 // ── popups & the end-of-turn breakdown ────────────────────────────────────
 typedef struct { char t[32]; u16 c; int life, big, peef; } Pop;
@@ -175,15 +187,29 @@ static void playPeef(float v) {
 }
 
 // ── the lane → the screens ────────────────────────────────────────────────
+// Two views, like the website: the near table lives on the bottom (touch) screen and never
+// moves; the far tables live on the top screen. proj() routes by v and returns gy in the
+// tall-canvas space (0-191 top, 192-383 bottom), so every drawing call works unchanged.
 static float hwOf(float v) { return 1.0f / (INV_A + INV_B * v); }
-static void proj(float u, float v, int *x, int *gy, float *s) {
+static float nhwOf(float v) { return 1.0f / (N_INV_A + N_INV_B * v); }
+static void projFar(float u, float v, int *x, int *y, float *s) {
     float hw = hwOf(v), fy = FY0 + (hw - HW0) / SLOPE;
     *x = (int)((VCX + (u - 0.5f) * 2 * hw) * 256) + shX;
-    *gy = (int)(fy * MINI_PH) - MINI_OFF + shY;
+    *y = (int)(fy * MINI_PH) - MINI_OFF + shY;
     if (s) *s = hw * 256;
 }
+static void projNear(float u, float v, int *x, int *y, float *s) {
+    float hw = nhwOf(v), fy = N_FY0 + (hw - N_HW0) / N_SLOPE;
+    *x = (int)((N_VCX + (u - 0.5f) * 2 * hw) * 256) + shX;
+    *y = (int)(fy * N_PH) - N_OFF + shY;
+    if (s) *s = hw * 256;
+}
+static void proj(float u, float v, int *x, int *gy, float *s) {
+    if (v < V_DESTINY) { int y; projNear(u, v, x, &y, s); *gy = y + SH; }
+    else { int y; projFar(u, v, x, &y, s); *gy = y; }
+}
 static float uAtEdge(int tx) {                                  // touch x → u along the near edge
-    float hw = hwOf(0.02f), u = ((tx / 256.0f) - VCX) / (2 * hw) + 0.5f;
+    float hw = nhwOf(0.02f), u = ((tx / 256.0f) - N_VCX) / (2 * hw) + 0.5f;
     return u < 0.06f ? 0.06f : u > 0.94f ? 0.94f : u;
 }
 
@@ -401,13 +427,21 @@ void inputMini(void) {
 
 // ── drawing ───────────────────────────────────────────────────────────────
 static void drawTable(void) {
-    const u8 *t = mini_table;
-    if (shX == 0 && shY == 0) { drawIndexed(t, palT); return; }
-    for (int y = 0; y < 2 * SH; y++) {                       // shaking: the whole picture jolts
-        int sy = y - shY; if (sy < 0) sy = 0; if (sy >= 2 * SH) sy = 2 * SH - 1;
-        u16 *row = y < SH ? &bufTop[y * SW] : &bufBot[(y - SH) * SW];
+    // top screen: the far tables (the fixed view, as before)
+    for (int y = 0; y < SH; y++) {
+        int sy = y - shY; if (sy < 0) sy = 0; if (sy >= MINI_TABLE_H) sy = MINI_TABLE_H - 1;
+        u16 *row = &bufTop[y * SW];
         const u8 *src = &mini_table[sy * SW];
-        for (int x = 0; x < SW; x++) { int sx = x - shX; if (sx < 0) sx = 0; if (sx >= SW) sx = SW - 1; row[x] = palT[src[sx]]; }
+        if (shX == 0) { for (int x = 0; x < SW; x++) row[x] = palT[src[x]]; }
+        else for (int x = 0; x < SW; x++) { int sx = x - shX; if (sx < 0) sx = 0; if (sx >= SW) sx = SW - 1; row[x] = palT[src[sx]]; }
+    }
+    // bottom screen: the near table you throw from (steady — the camera lives up top)
+    for (int y = 0; y < SH; y++) {
+        int sy = y - shY; if (sy < 0) sy = 0; if (sy >= MINI_NEAR_H) sy = MINI_NEAR_H - 1;
+        u16 *row = &bufBot[y * SW];
+        const u8 *src = &mini_near[sy * SW];
+        if (shX == 0) { for (int x = 0; x < SW; x++) row[x] = palN[src[x]]; }
+        else for (int x = 0; x < SW; x++) { int sx = x - shX; if (sx < 0) sx = 0; if (sx >= SW) sx = SW - 1; row[x] = palN[src[sx]]; }
     }
 }
 static void drawMarkerAt(float u, float v, float rot, int col) {

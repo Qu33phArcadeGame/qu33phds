@@ -2,8 +2,8 @@
 // generated: what is inside mini.pak (loaded by pakUse). 
 #include "qu.h"
 #define MINI_PAK "mini.pak"
-#define MINI_PAK_SIZE 478092
-#define MINI_PAK_ID 105942656u
+#define MINI_PAK_SIZE 527756
+#define MINI_PAK_ID 105942657u
 #define mini_pal ((const u16 *)(arcPak + 8))
 #define MINI_PAL_BYTES 512
 #define mini_table ((const u8 *)(arcPak + 520))
@@ -52,6 +52,12 @@
 #define MS_PEEF3_BYTES 11100
 #define ms_music ((const u8 *)(arcPak + 253820))
 #define MS_MUSIC_BYTES 224272
+#define mini_near_pal ((const u16 *)(arcPak + 478092))
+#define MINI_NEAR_PAL_BYTES 512
+#define mini_near ((const u8 *)(arcPak + 478604))
+#define MINI_NEAR_BYTES 49152
+#define MINI_NEAR_W 256
+#define MINI_NEAR_H 192
 #define MINI_TABLE_W 256
 #define MINI_TABLE_H 384
 #define MINI_PH 455
