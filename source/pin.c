@@ -103,8 +103,8 @@ static void triCollide(void) {
 }
 static void pinStep(void);
 static int pinAcc;
-void updatePin(void) {                                 // 4 physics steps every 3 frames: a livelier table
-    pinStep(); if (state == ST_PLAY && ++pinAcc >= 3) { pinAcc = 0; pinStep(); }
+void updatePin(void) {                                 // one physics step a frame: the GBA's pace (it runs its
+    pinStep(); (void)pinAcc;                           // 4-for-3 steps at 45 frames a second, 60 steps a second)
 }
 static void pinStep(void) {
     fl += (tl - fl) * 0.5f; fr += (tr - fr) * 0.5f;
