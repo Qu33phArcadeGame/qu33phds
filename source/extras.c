@@ -181,6 +181,48 @@ static const Pay PAYS[] = {
     { { Y_BLUE, Y_BLUE, -1 }, 2, "DOUBLE BLUE" }, { { -1, Y_COIN, -1 }, 2, "ANY COIN" }, { { -1, Y_CHAIR, -1 }, 1, "ANY CHAIR" } };
 static int reel[3] = { Y_LOGO, Y_MEGA, Y_COIN }, result[3], spinT, spinBet, lastWin; static const char *lastLabel = "";
 static int slotSel;
+// ── the lever: every spin pulls it down toward you and lets it spring back ──
+// (the machine picture's own lever is lifted off and redrawn turned about its hub; the hub and
+// the parts below stay put. Both pictures, plain and Golden, have it in the same place.)
+#define LV_X0 225                   // the lever's columns (the machine's side ends before 225)
+#define LV_X1 252
+#define LV_TOP 126                  // the ball's top row
+#define LV_ROD 148                  // the rod's top row (the ball is above it)
+#define LV_HUB 190                  // where the rod goes into the hub
+#define LV_BC 137                   // the ball's middle row
+#define LV_P 203                    // the hub's middle: what the lever turns about
+#define LEVER_LEN 20                // frames a pull takes: 6 down, 3 held, 11 back up
+static int leverT;
+static float leverAngle(void) {
+    if (leverT <= 0) return 0;
+    int f = LEVER_LEN - leverT + 1;                                   // 1..LEVER_LEN
+    if (f <= 6) { float u = f / 6.0f; return 2.6f * u * (2 - u); }   // yanked down, easing in
+    if (f <= 9) return 2.6f;
+    float u = (LEVER_LEN - f) / (float)(LEVER_LEN - 9);               // springing back up
+    return 2.6f * u * u;
+}
+static void drawLever(const u8 *img, const u16 *pal) {
+    float th = leverAngle(); if (th <= 0.01f) return;
+    float c = fcos(th);
+    // lift the resting lever off the picture
+    for (int y = LV_TOP; y < LV_HUB; y++) for (int x = LV_X0; x < LV_X1; x++) if (img[y * SW + x] != 255) gpx(x, y, DARK);
+    // the rod: each screen row between the hub and the ball takes the picture row that turns onto it
+    if (c > 0.08f || c < -0.08f) {
+        int ya = LV_P - (int)((LV_P - LV_ROD) * c), yb = LV_P - (int)((LV_P - LV_HUB) * c);
+        if (ya > yb) { int t = ya; ya = yb; yb = t; }
+        for (int y = ya; y <= yb; y++) {
+            if (c > 0 && y >= LV_HUB) continue;                       // above the hub it goes in behind it
+            int sy = LV_P - (int)((LV_P - y) / c);
+            if (sy < LV_ROD || sy >= LV_HUB) continue;
+            const u8 *s = &img[sy * SW];
+            for (int x = LV_X0; x < LV_X1; x++) if (s[x] != 255) gpx(x, y, pal[s[x]]);
+        }
+    }
+    // the ball, round from every angle, at the end of the rod
+    int dy = (LV_P - (int)((LV_P - LV_BC) * c)) - LV_BC;
+    for (int sy = LV_TOP; sy < LV_ROD; sy++) { const u8 *s = &img[sy * SW];
+        for (int x = LV_X0; x < LV_X1; x++) if (s[x] != 255) gpx(x, sy + dy, pal[s[x]]); }
+}
 static int pickSym(void) { int t = 0; for (int i = 0; i < 7; i++) t += WEIGHT[i]; int r = rand() % t; for (int i = 0; i < 7; i++) { r -= WEIGHT[i]; if (r < 0) return i; } return Y_BLUE; }
 static int checkWin(const int *r, const char **label) {
     int isM[3]; for (int i = 0; i < 3; i++) isM[i] = r[i] >= Y_RED;
@@ -196,11 +238,12 @@ static int checkWin(const int *r, const char **label) {
 }
 static void spin(int bet) {
     if (spinT > 0 || sv.coins < bet) { if (sv.coins < bet) lastLabel = "not enough coins"; return; }
-    spendCoins(bet); spinBet = bet; spinT = 13; lastWin = 0; lastLabel = "";
+    spendCoins(bet); spinBet = bet; spinT = 13; lastWin = 0; lastLabel = ""; leverT = LEVER_LEN;   // pull the lever
     for (int i = 0; i < 3; i++) result[i] = pickSym();
     sv.slotSpins++; unlockAch(A_SLOT_SPIN);
 }
 void updateSlot(void) {
+    if (leverT > 0) leverT--;
     if (spinT <= 0) return;
     spinT--;
     for (int i = 0; i < 3; i++) { int stopAt = 9 - i * 4; if (spinT > stopAt) reel[i] = rand() % 7; else reel[i] = result[i]; }
@@ -223,6 +266,7 @@ void drawSlot(void) {
     // the reels turning in its three windows
     gClipLo = 0; gClipHi = 2 * SH;
     drawIndexedMasked(gold ? slotmachg : slotmach, slotPalT[gold], SLOTMACH_H, 0);
+    drawLever(gold ? slotmachg : slotmach, slotPalT[gold]);              // mid-pull: the lever turned down
     static const int WINX[3] = { 77, 126, 174 };                     // the centres of the machine's three windows
     for (int i = 0; i < 3; i++) blitScaled(SYM[reel[i]], 52, 52, WINX[i], 164, 29, 29);
     if (slotPayT) {                                                     // the paytable, over the top screen
