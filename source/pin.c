@@ -103,8 +103,9 @@ static void triCollide(void) {
 }
 static void pinStep(void);
 static int pinAcc;
-void updatePin(void) {                                 // one physics step a frame: the GBA's pace (it runs its
-    pinStep(); (void)pinAcc;                           // 4-for-3 steps at 45 frames a second, 60 steps a second)
+void updatePin(void) {                                 // 4 physics steps every 5 frames in play: a little
+    if (state == ST_PLAY && ++pinAcc >= 5) { pinAcc = 0; return; }   // slower than the GBA's pace
+    pinStep();
 }
 static void pinStep(void) {
     fl += (tl - fl) * 0.5f; fr += (tr - fr) * 0.5f;

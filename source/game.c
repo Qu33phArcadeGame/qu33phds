@@ -90,18 +90,19 @@ static int trackData(int t, const u8 **d, int *len, int *rate, int *frames) {
     if (t == MUS_MAIN) { *d = snd_music; *len = SND_MUSIC_LEN; *rate = SND_MUSIC_RATE; *frames = SND_MUSIC_FRAMES; return 1; }
     return 0;
 }
+#define MUSIC_VOL 100                  // the songs' volume (0-127; was 70)
 static int musicFrames;
 void musicStart(void) {
     if (musicCh >= 0 || !sv.musicOn) return;
     const u8 *d; int len, rate;
     if (!trackData(musicTrack, &d, &len, &rate, &musicFrames)) return;
-    musicCh = soundPlaySample(d, SoundFormat_ADPCM, len, rate, 70, 64, false, 0); musicT = 0; musicMuted = 0;
+    musicCh = soundPlaySample(d, SoundFormat_ADPCM, len, rate, MUSIC_VOL, 64, false, 0); musicT = 0; musicMuted = 0;
 }
 // X in a game: mute/unmute without restarting the song (it keeps playing silently, so it
 // carries on from where it is rather than starting over)
 void musicToggle(void) {
     sv.musicOn = !sv.musicOn;
-    if (musicCh >= 0) { soundSetVolume(musicCh, sv.musicOn ? 70 : 0); musicMuted = !sv.musicOn; }
+    if (musicCh >= 0) { soundSetVolume(musicCh, sv.musicOn ? MUSIC_VOL : 0); musicMuted = !sv.musicOn; }
     else if (sv.musicOn) musicStart();
 }
 void musicStop(void) { if (musicCh >= 0) { soundKill(musicCh); musicCh = -1; } }

@@ -104,25 +104,12 @@ void inputArcade(void) {
 }
 
 // ══ MINI QU33PH ═══════════════════════════════════════════════════════════
-// the lane, measured from the website's far-end photo (VIEW.far in mini.html)
-#define INV_A   2.311f
-#define INV_B   2.694f
-#define HW0     0.2094f
-#define FY0     0.167f
-#define SLOPE   0.3414f
-#define VCX     0.4968f
-#define LANE_AR 4.0f
-// the near-end photo (VIEW.near in mini.html): the bottom screen's table. The camera
-// never moves it — you aim and throw from here, and the top screen does the travelling.
-#define N_INV_A   2.083f
-#define N_INV_B   1.748f
-#define N_HW0     0.2866f
-#define N_FY0     0.042f
-#define N_SLOPE   0.2292f
-#define N_VCX     0.4965f
-#define N_PH      308
-#define N_OFF     82
-#define V_DESTINY 0.5f                 // the seam between the first two tables
+// the lane: all three tables end to end, one long picture (mini_table, built from the website's
+// table photo by tools/make_mini_lane.py) that the two screens look at 384 rows at a time. v runs
+// 0..1 from the near edge to the far wall (a table each third); u 0..1 across. The view rests on
+// the near end while you aim, follows each throw up the tables, then comes back.
+#define V_DESTINY (1.0f / 3)           // the seam between the first two tables
+#define LANE_AR 4.0f                   // the lane's length over its width, for the physics (the website's)
 #define V_WALL  1.0f
 #define WALL_BOUNCE 0.42f
 #define MK_LEN  0.115f
@@ -146,10 +133,11 @@ static int matchSecs = 60, sudden, score, turnPts, turn, coinsWon, newBest;
 static float tLeft, suddenAt, turnPause, aimU = 0.5f, aimA, shakeT, shakeAmt;
 static int shX, shY;
 static u16 palT[256];                  // the table's palette through the current theme
-static u16 palN[256];                  // the near table's palette through the current theme
+static float camY = -1, camHold;       // the view: the lane's row at the top of the top screen
+#define CAM_REST (MINI_LANE_H - 2 * SH)
 
 void miniThemeChanged(void) { for (int i = 0; i < 256; i++) palT[i] = themeTint(mini_pal[i], sv.theme); }
-void miniNearThemeChanged(void) { for (int i = 0; i < 256; i++) palN[i] = themeTint(mini_near_pal[i], sv.theme); }
+void miniNearThemeChanged(void) {}
 // the theme changed: recolour whichever arcade game is loaded (the others recolour when opened)
 void arcadeThemeChanged(void) { if (pakIs(MINI_PAK)) { miniThemeChanged(); miniNearThemeChanged(); } if (pakIs(BALL_PAK)) ballThemeChanged(); fidgetThemeChanged(); bowlThemeChanged(); stackThemeChanged(); flipThemeChanged(); dozerThemeChanged(); pinThemeChanged(); }
 
@@ -189,31 +177,21 @@ static void playPeef(float v) {
 }
 
 // ── the lane → the screens ────────────────────────────────────────────────
-// Two views, like the website: the near table lives on the bottom (touch) screen and never
-// moves; the far tables live on the top screen. proj() routes by v and returns gy in the
-// tall-canvas space (0-191 top, 192-383 bottom), so every drawing call works unchanged.
-static float hwOf(float v) { return 1.0f / (INV_A + INV_B * v); }
-static float nhwOf(float v) { return 1.0f / (N_INV_A + N_INV_B * v); }
-static void projFar(float u, float v, int *x, int *y, float *s) {
-    float hw = hwOf(v), fy = FY0 + (hw - HW0) / SLOPE;
-    *x = (int)((VCX + (u - 0.5f) * 2 * hw) * 256) + shX;
-    *y = (int)(fy * MINI_PH) - MINI_OFF + shY;
-    if (s) *s = hw * 256;
-}
-static void projNear(float u, float v, int *x, int *y, float *s) {
-    float hw = nhwOf(v), fy = N_FY0 + (hw - N_HW0) / N_SLOPE;
-    *x = (int)((N_VCX + (u - 0.5f) * 2 * hw) * 256) + shX;
-    *y = (int)(fy * N_PH) - N_OFF + shY;
-    if (s) *s = hw * 256;
-}
+// proj() returns gy in the tall-canvas space (0-191 top screen, 192-383 bottom), after the view's
+// scroll, so every drawing call works unchanged.
+static float hwOf(float v) { return 1.0f / (LANE_A + LANE_B * v); }
+static float laneY(float v) { return LANE_YF + (hwOf(v) - LANE_HWF) * LANE_K; }
 static void proj(float u, float v, int *x, int *gy, float *s) {
-    if (v < V_DESTINY) { int y; projNear(u, v, x, &y, s); *gy = y + SH; }
-    else { int y; projFar(u, v, x, &y, s); *gy = y; }
+    float hw = hwOf(v);
+    *x = (int)((0.5f + (u - 0.5f) * 2 * hw) * 256) + shX;
+    *gy = (int)(laneY(v) - camY) + shY;
+    if (s) *s = hw * 256;
 }
 static float uAtEdge(int tx) {                                  // touch x → u along the near edge
-    float hw = nhwOf(0.02f), u = ((tx / 256.0f) - N_VCX) / (2 * hw) + 0.5f;
+    float hw = hwOf(0.02f), u = ((tx / 256.0f) - 0.5f) / (2 * hw) + 0.5f;
     return u < 0.06f ? 0.06f : u > 0.94f ? 0.94f : u;
 }
+static int camResting(void) { return camY >= CAM_REST - 6; }
 
 static int dragging, dsx, dsy, dnx, dny, charging, chargeT, ph;
 static float power;
@@ -230,7 +208,7 @@ static void startMini(int secs) {
     matchSecs = secs; suddenAt = secs * 0.2f; tLeft = secs;
     sudden = 0; score = 0; turn = 1; coinsWon = 0; newBest = 0; turnPause = 0;
     popsClear(); msgN = 0; msgT = 0; shakeT = 0; shakeAmt = 0;
-    newTurn(); dragReset();
+    newTurn(); dragReset(); camY = CAM_REST; camHold = 0;
     screen = S_MINI;
 }
 static int nextColor(void) { return idx < 4 ? order[idx] : -1; }
@@ -381,7 +359,19 @@ void updateMini(void) {
             moving = 1;
         }
     }
-    if (live >= 0 && !moving) live = -1;
+    if (live >= 0 && !moving) { live = -1; camHold = 0.5f; }
+    {   // the view: follow the marker in flight, hold a moment where it stopped, then back to the near end
+        // (and straight back as soon as you start the next throw)
+        float target = CAM_REST; static int follow = -1;
+        if (live >= 0) follow = live;
+        if (camHold > 0) camHold -= DT;
+        if (follow >= 0 && follow < nmk && !mk[follow].off && (live >= 0 || camHold > 0 || turnPause > 0)) target = laneY(mk[follow].v) - 150;
+        else follow = -1;
+        if (dragging || charging) target = CAM_REST;
+        if (target < 0) target = 0; if (target > CAM_REST) target = CAM_REST;
+        camY += (target - camY) * (target > camY ? 0.16f : 0.12f);
+        if (fabsf_(target - camY) < 0.5f) camY = target;
+    }
     if (turnPause > 0) { turnPause -= DT; if (turnPause <= 0) newTurn(); }
     else if (live < 0 && idx >= 4 && !moving && nmk > 0 && !scored) { scored = 1; endTurn(); }
     int k = 0;                                               // age the popups, dropping finished ones in order
@@ -392,7 +382,7 @@ void updateMini(void) {
 }
 
 // ── input ─────────────────────────────────────────────────────────────────
-static int canThrow(void) { return screen == S_MINI && live < 0 && nextColor() >= 0 && turnPause <= 0; }
+static int canThrow(void) { return screen == S_MINI && live < 0 && nextColor() >= 0 && turnPause <= 0 && camResting(); }
 void inputMini(void) {
     if (screen == S_MINI_PAUSE) {
         if (kDown & KEY_START) screen = S_MINI;
@@ -429,22 +419,34 @@ void inputMini(void) {
 
 // ── drawing ───────────────────────────────────────────────────────────────
 static void drawTable(void) {
-    // top screen: the far tables (the fixed view, as before)
-    for (int y = 0; y < SH; y++) {
-        int sy = y - shY; if (sy < 0) sy = 0; if (sy >= MINI_TABLE_H) sy = MINI_TABLE_H - 1;
-        u16 *row = &bufTop[y * SW];
+    // both screens: 384 rows of the three-table lane, from the view's row down
+    int c0 = (int)camY;
+    for (int y = 0; y < 2 * SH; y++) {
+        int sy = y + c0 - shY; if (sy < 0) sy = 0; if (sy >= MINI_LANE_H) sy = MINI_LANE_H - 1;
+        u16 *row = y < SH ? &bufTop[y * SW] : &bufBot[(y - SH) * SW];
         const u8 *src = &mini_table[sy * SW];
         if (shX == 0) { for (int x = 0; x < SW; x++) row[x] = palT[src[x]]; }
         else for (int x = 0; x < SW; x++) { int sx = x - shX; if (sx < 0) sx = 0; if (sx >= SW) sx = SW - 1; row[x] = palT[src[sx]]; }
     }
-    // bottom screen: the near table you throw from (steady — the camera lives up top)
-    for (int y = 0; y < SH; y++) {
-        int sy = y - shY; if (sy < 0) sy = 0; if (sy >= MINI_NEAR_H) sy = MINI_NEAR_H - 1;
-        u16 *row = &bufBot[y * SW];
-        const u8 *src = &mini_near[sy * SW];
-        if (shX == 0) { for (int x = 0; x < SW; x++) row[x] = palN[src[x]]; }
-        else for (int x = 0; x < SW; x++) { int sx = x - shX; if (sx < 0) sx = 0; if (sx >= SW) sx = SW - 1; row[x] = palN[src[sx]]; }
-    }
+}
+// the whole lane in little, down the top screen's left side: where everything is while the view
+// is down at the near end
+static void drawMap(void) {
+    const int X = 6, Y = 44, MH = 120, MW = 16;
+    rect(bufTop, X - 2, Y - 2, MW + 4, MH + 4, COL(3, 3, 4));
+    for (int t = 0; t < 3; t++) { int y0 = Y + MH - (t + 1) * MH / 3 + 1, y1 = Y + MH - t * MH / 3; rect(bufTop, X, y0, MW, y1 - y0, COL(13, 9, 6)); }
+    int bx = X + (int)(BOXU * MW), by = Y + MH - (int)(BOXV * MH);
+    rect(bufTop, bx - 3, by - 2, 6, 4, COL(31, 26, 4));
+    for (int c = 0; c < chairCount(); c++) { int cx = X + (int)(CH_U[c] * MW), cy = Y + MH - (int)(CH_V[c] * MH); rect(bufTop, cx - 3, cy - 1, 6, 3, COL(22, 22, 24)); }
+    static const u16 MC[4] = { COL(6, 28, 8), COL(31, 10, 22), COL(31, 28, 4), COL(8, 16, 31) };
+    for (int i = 0; i < nmk; i++) { MM *m = &mk[i]; if (m->off) continue;
+        int mx = X + (int)(m->u * MW), my = Y + MH - (int)(m->v * MH); rect(bufTop, mx - 1, my - 1, 3, 3, MC[m->col]); }
+    // the part of the lane the screens show now
+    float vTop = -1, vBot = -1;
+    for (int k = 0; k <= 100; k++) { float v = k / 100.0f, y = laneY(v) - camY; if (y >= 0) vTop = v; if (y <= 2 * SH && vBot < 0) vBot = v; }
+    if (vBot < 0) vBot = 0; if (vTop < 0) vTop = 0;
+    { int ya = Y + MH - (int)(vTop * MH), yb = Y + MH - (int)(vBot * MH); u16 w = COL(28, 28, 30);
+      rect(bufTop, X - 2, ya, 1, yb - ya, w); rect(bufTop, X + MW + 1, ya, 1, yb - ya, w); rect(bufTop, X - 2, ya, MW + 4, 1, w); rect(bufTop, X - 2, yb - 1, MW + 4, 1, w); }
 }
 static void drawMarkerAt(float u, float v, float rot, int col) {
     int x, gy; float s; proj(u, v, &x, &gy, &s);
@@ -513,6 +515,7 @@ void drawMini(void) {
     else { sprintf(s, "TURN %d", turn); text(bufTop, 6, 20, s, COL(17, 26, 31), 1); }
     sprintf(s, "%d PTS", score); text(bufTop, SW - 6 - textW(s, 1), 4, s, score < 0 ? COL(31, 13, 13) : WHITE, 1);
     text(bufTop, SW - 6 - textW(THEME_NAME[sv.theme], 1), 20, THEME_NAME[sv.theme], GOLD, 1);
+    drawMap();
     // popups, then the turn breakdown, on the bottom screen: the near table is clear once
     // you've thrown, so nothing covers the far end where the markers land
     int py = 6;

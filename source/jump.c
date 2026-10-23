@@ -51,7 +51,11 @@ int jumpEnter(void) { return pakUse(JUMP_PAK, JUMP_PAK_SIZE, JUMP_PAK_ID); }
 // also lays eggs that hatch into a following flock)
 typedef struct { float speed, jump, grav; int airJumps, cls; const u16 *s[3][2]; int w[3][2], h; } Runner;
 static Runner RUN[7];
-#define JCHAR sv.spare[4]                               // the chosen runner (spare save room)
+#define JSAVE sv.spare[4]                               // the chosen runner (bits 0-3) and auto-scroll (bit 4): spare save room
+static int jChar(void) { return (int)(JSAVE & 15); }
+static void setChar(int k) { JSAVE = (JSAVE & ~15u) | (u32)k; }
+static int jAuto(void) { return (int)((JSAVE >> 4) & 1); }
+static void setAuto(int a) { JSAVE = (JSAVE & ~16u) | (a ? 16u : 0); }
 static void runnersInit(void) {
     #define SET(i, sp, jp, gr, aj, cl, nm, NM) RUN[i] = (Runner){ sp, jp, gr, aj, cl, { { nm##_stand##r, nm##_stand##l }, { nm##_run##r, nm##_run##l }, { nm##_jump##r, nm##_jump##l } }, \
         { { NM##_STANDR_W, NM##_STANDL_W }, { NM##_RUNR_W, NM##_RUNL_W }, { NM##_JUMPR_W, NM##_JUMPL_W } }, NM##_STANDR_H }
@@ -64,7 +68,7 @@ static void runnersInit(void) {
     SET(6, 1.5f, 1.025f, 0.70f, 1, 2, jc_hem, JC_HEM);
     #undef SET
 }
-static Runner *ch(void) { if (JCHAR > 6) JCHAR = 0; return &RUN[JCHAR]; }
+static Runner *ch(void) { if (jChar() > 6) setChar(0); return &RUN[jChar()]; }
 static float baseZoom(void) { return ch()->cls ? BASEZ * 0.76f : BASEZ; }   // cats and chickens see more of the level
 static int airUsed;
 
@@ -76,7 +80,7 @@ typedef struct { float born, gap, t1, t2, t3, sx, sy, lx, vs; int col, sf, init;
 static Chick flock[14]; static int nFlock;
 static void flockReset(void) { trHead = trN = 0; trailDist = runDist = 0; nFlock = 0; trailFace = 1; nextEgg = (20 + frand() * 10) * 13; lastTX = p.x; lastTY = p.y; }
 static void flockStep(void) {
-    if (JCHAR != 6) return;
+    if (jChar() != 6) return;
     float dx = p.x - lastTX, dy = p.y - lastTY, d = fsqrt(dx * dx + dy * dy);
     if (d > 0.005f) {
         trailDist += d; runDist += fabsf_(dx); lastTX = p.x; lastTY = p.y;
@@ -379,6 +383,7 @@ static void genPath(void) {
     }
     if ((frame & 7) == 0) cull();
 }
+static void autoReset(void);
 static void startRun(int m) {
     jMode = m; nPl = nOb = nCo = nPi = 0; score = 0; progress = 0; state = ST_PLAY; moveDir = 0; jumpQ = 0; frame = 0;
     startX = W * 0.5f; startY = H * 0.72f;
@@ -399,7 +404,27 @@ static void startRun(int m) {
         if (m == M_RUN) goRight(startX + W * 0.28f, startY, 1.1f + rnd(), startX + W * 0.7f);
         else { genMode = 0; genX = startX; lastPlatX = startX; genY = startY - (48 + rnd() * 18); segLeft = 6 + rand() % 4; }
     }
-    flockReset(); genPath(); screen = S_JUMP;
+    flockReset(); genPath(); autoReset(); screen = S_JUMP;
+}
+static void gameOver(void);
+// ── AUTO SCROLL (the menu's style switch): the view moves on by itself, right or up — whichever
+// way the course is taking you (judged from where you've been getting further lately) — and you
+// have to keep up: it pushes you along, and dropping off its bottom edge ends the run. It waits a
+// moment at the start and after every launch, bounce chain or flappy run.
+static float autoX, autoY, dirEma, lastBestX, lastBestUp; static int autoT, autoDir;
+static void autoReset(void) { autoX = camX; autoY = camY; autoT = 0; autoDir = jMode == M_JUMP ? 2 : 1; dirEma = autoDir == 2 ? -1 : 1; lastBestX = bestX; lastBestUp = bestUp; }
+static void autoScroll(void) {
+    float dx = bestX - lastBestX, du = lastBestUp - bestUp; lastBestX = bestX; lastBestUp = bestUp;
+    if (dx + du > 0.01f) dirEma = dirEma * 0.94f + ((dx - du) / (dx + du)) * 0.06f;   // +1 going right, -1 going up
+    if (dirEma > 0.3f) autoDir = 1; else if (dirEma < -0.3f) autoDir = 2;
+    if (flight || bouncing || flappy || flappyFreeze) { autoX = camX; autoY = camY; autoT = 0; return; }
+    if (++autoT < 100) { autoX = camX; autoY = camY; return; }
+    float ramp = progress * 0.004f; if (ramp > 1) ramp = 1;
+    if (autoDir == 1) { autoX += 1.1f + ramp; if (camX < autoX) camX = autoX; else autoX = camX; autoY = camY; }
+    else {
+        autoY -= 0.5f + ramp * 0.5f; if (camY > autoY) camY = autoY; else autoY = camY; autoX = camX;
+        if (p.y - p.h * 0.5f > camY + H * 0.5f + (H * 0.5f) / zoom) gameOver();      // left behind below the view
+    }
 }
 static void gameOver(void) {
     state = ST_OVER; flappy = 0;
@@ -470,14 +495,20 @@ static void step(void) {
     if (p.onGround) lastGroundY = p.y;
     if (flight || flappy || flappyFreeze) { camX += ((p.x - W * 0.5f) - camX) * 0.12f; camY += ((p.y - H * 0.5f) - camY) * 0.12f; }
     else {
-        float topB = camY + H * 0.36f, botB = camY + H * 0.60f, leftB = camX + W * 0.30f, rightB = camX + W * 0.48f;
-        if (p.y < topB) camY += (p.y - topB) * 0.18f; else if (p.y > botB) camY += (p.y - botB) * 0.18f;
+        // keep the runner down on the bottom screen (about three quarters of the way down the two
+        // screens), so the top screen shows what's up ahead: the next climb, the sky above a jump
+        float z = zoom < 0.3f ? 0.3f : zoom;
+        #define CAM_AT(f) (p.y - (H * 0.5f + ((f) * H - H * 0.5f) / z))     // camY that puts the runner at screen fraction f
+        float topB = CAM_AT(0.50f), botB = CAM_AT(0.84f), leftB = camX + W * 0.30f, rightB = camX + W * 0.48f;
+        if (camY > topB) camY += (topB - camY) * 0.18f; else if (camY < botB) camY += (botB - camY) * 0.18f;   // never above half way, never below the bottom edge
+        if (p.onGround) camY += (CAM_AT(0.74f) - camY) * 0.05f;           // and settle back down there once you land
         if (p.x < leftB) camX += (p.x - leftB) * 0.18f; else if (p.x > rightB) camX += (p.x - rightB) * 0.18f;
     }
     if (p.x > bestX) bestX = p.x;
     if (p.y < bestUp) bestUp = p.y;
     progress = ((startY - bestUp) + (bestX - startX)) / 13;
     score = flapEndless ? flappyPassed : (progress > 0 ? (int)progress : 0);
+    if (jAuto() && !flapEndless) { autoScroll(); if (state != ST_PLAY) return; }
     genPath();
     for (int i = 0; i < nCo; i++) { Coin *c = &co[i]; if (!c->got && fabsf_(p.x - c->x) < 16 && fabsf_(p.y - c->y) < 16) { c->got = 1; addCoins(1); coinsWon++; } }
     for (int i = 0; i < nOb; i++) { Obs *o = &ob[i];
@@ -595,7 +626,7 @@ void drawJump(void) {
         if (o->roll == 0 && sv.theme != 1 && sv.theme != 4) blitScaled(sp, w, JM_0_H, x, y, (int)(w * hgt / JM_0_H + 0.5f), (int)(hgt + 0.5f));   // standing still: no rotation needed
         else drawMarkerFx(sp, w, JM_0_H, x, y, o->roll, hgt / JM_0_H, o->col); }
     if (mega.on && !mega.hit) { int x = (int)SXf(mega.x), y = (int)SYf(mega.y); blitRotScale(slotSymT[1], SLOT_LOGO_W, SLOT_LOGO_H, x, y, 0, mega.w * zoom / SLOT_LOGO_W); }
-    if (JCHAR == 6) for (int i = 0; i < nFlock; i++) {    // H3MMINGWAY's flock, retracing her trail
+    if (jChar() == 6) for (int i = 0; i < nFlock; i++) {    // H3MMINGWAY's flock, retracing her trail
         Chick *c = &flock[i]; float age = runDist - c->born, x, y; if (!trailAt(c->gap, &x, &y)) continue;
         if (!c->init) { c->sx = x; c->sy = y; c->lx = x; c->sf = 1; c->init = 1; } else { c->sx += (x - c->sx) * 0.46f; c->sy += (y - c->sy) * 0.36f; }
         c->vs = c->vs * 0.82f + (c->sx - c->lx) * 0.18f; c->lx = c->sx; if (c->vs > 0.14f) c->sf = 1; else if (c->vs < -0.14f) c->sf = -1;
@@ -616,7 +647,7 @@ void drawJump(void) {
         blitScaled(sp, w, r->h, (int)SXf(p.x), (int)(SYf(p.y + p.h * 0.5f) - dh / 2), dw, dh);   // upright: the quick scaler
     }
     sprintf(s, "%d", score); text(bufTop, 6, 4, s, WHITE, 2);
-    sprintf(s, "%s  BEST %d", MODE_NAME[jMode], (int)JBEST(jMode)); text(bufTop, SW - 6 - textW(s, 1), 6, s, GOLD, 1);
+    sprintf(s, "%s%s  BEST %d", jAuto() && jMode != M_FLAP ? "AUTO " : "", MODE_NAME[jMode], (int)JBEST(jMode)); text(bufTop, SW - 6 - textW(s, 1), 6, s, GOLD, 1);
     if (megaFlash > 0) textC(bufTop, 80, "MEGA!", COL(31, 26, 9), 2);
     if (bounceFlash > 0 && bounceCombo >= 2) { sprintf(s, "BOUNCE x%d", bounceCombo); textC(bufTop, 110, s, COL(15, 31, 19), 1); }
     if (flappyFreeze) textC(bufTop, 140, "TAP TO JUMP", WHITE, 2);
@@ -625,14 +656,23 @@ void drawJump(void) {
 }
 
 // ── menu and results ──────────────────────────────────────────────────────
+// the bottom screen: the four modes, the style switch (PLATFORMER: the view follows you;
+// AUTO SCROLL: the view moves on by itself and you have to keep up), then PICK RUNNER and BACK
 static Btn JB[9]; static int charSel;
+#define JB_STYLE 4
+#define JB_PICK 5
+#define JB_BACK 6
+#define JB_N 7
 static void jmLayout(void) {
-    for (int i = 0; i < 4; i++) { JB[i] = (Btn){ 38, 4 + i * 36, 180, 31, "", 0, 0 }; strcpy(JB[i].label, MODE_NAME[i]); }
-    JB[4] = (Btn){ 10, 152, 112, 32, "RUNNER", 0, 0 }; JB[5] = (Btn){ 134, 152, 112, 32, "BACK", 0, 0 };
+    for (int i = 0; i < 4; i++) { JB[i] = (Btn){ 38, 3 + i * 32, 180, 29, "", 0, 0 }; strcpy(JB[i].label, MODE_NAME[i]); }
+    JB[JB_STYLE] = (Btn){ 38, 133, 180, 24, "", 0, 0 }; strcpy(JB[JB_STYLE].label, jAuto() ? "STYLE: AUTO SCROLL" : "STYLE: PLATFORMER");
+    JB[JB_STYLE].col = jAuto() ? COL(31, 20, 8) : COL(12, 30, 18);
+    JB[JB_PICK] = (Btn){ 10, 161, 112, 29, "", 0, 0 }; JB[JB_BACK] = (Btn){ 134, 161, 112, 29, "BACK", 0, 0 };
 }
 static void runnerPic(u16 *buf, int k, int cx, int baseY, float sc, int pose) {
     Runner *r = &RUN[k]; blitRotScale(r->s[pose][0], r->w[pose][0], r->h, cx, baseY - (int)(r->h * sc / 2) + (buf == bufBot ? SH : 0), 0, sc);
 }
+static int runnerW(int k) { Runner *r = &RUN[k]; int w = 0; for (int p2 = 0; p2 < 2; p2++) if (r->w[p2][0] > w) w = r->w[p2][0]; return w; }
 void drawJumpMenu(void) {
     char s[40];
     runnersInit();
@@ -642,41 +682,58 @@ void drawJumpMenu(void) {
     textC(bufTop, 42, MODE_NAME[m], WHITE, 2);
     textC(bufTop, 76, MODE_BLURB[m], GREY, 1);
     for (int i = 0; i < 4; i++) { sprintf(s, "%s  best %d", MODE_NAME[i], (int)JBEST(i)); textC(bufTop, 100 + i * 14, s, i == m ? YELLOW : GREY, 1); }
+    textC(bufTop, 158, jAuto() ? "AUTO SCROLL" : "PLATFORMER", jAuto() ? COL(31, 20, 8) : COL(12, 30, 18), 1);
     gClipLo = 0; gClipHi = 2 * SH;
     runnerPic(bufTop, ch() - RUN, SW - 26, 180, 1.0f, (frame++ / 12) % 2 ? 1 : 0);   // your runner, ready
     coinCount(bufTop, 6, 176);
-    fillScreen(bufBot, DARK); drawBtns(bufBot, JB, 6, menuSel);
+    fillScreen(bufBot, DARK); drawBtns(bufBot, JB, JB_N, menuSel);
+    {   // PICK RUNNER: two small lines in its button
+        Btn *b = &JB[JB_PICK]; int on = menuSel == JB_PICK, dn = on && (kHeld & KEY_A) ? 2 : 0; u16 c = on ? YELLOW : WHITE;
+        int cap = b->h * 45 / 100, bx = b->x + cap + 1, bw = b->w - cap - 3;
+        int ty = b->y + dn + (b->h - 2 * FONTS_H - 1) / 2;
+        textS(bufBot, bx + (bw - textSW("PICK")) / 2, ty, "PICK", c);
+        textS(bufBot, bx + (bw - textSW("RUNNER")) / 2, ty + FONTS_H + 1, "RUNNER", c);
+    }
 }
 void inputJumpMenu(void) {
     jmLayout();
     if (kDown & KEY_B) { goScreen(S_ARCADE); return; }
-    int h = btnInput(JB, 6, &menuSel, 1);
+    int h = btnInput(JB, JB_N, &menuSel, 1);
     if (h >= 0 && h < 4) { coinsWon = 0; startRun(h); }
-    if (h == 4) { charSel = (int)JCHAR; goScreen(S_JUMP_CHARS); }
-    if (h == 5) goScreen(S_ARCADE);
+    if (h == JB_STYLE) { setAuto(!jAuto()); saveWrite(); }
+    if (h == JB_PICK) { charSel = jChar(); goScreen(S_JUMP_CHARS); }
+    if (h == JB_BACK) goScreen(S_ARCADE);
 }
-// pick your runner: just the pictures (four across, three below), as on the website
+// pick your runner: just the pictures (four across, three below), each fitted inside its own
+// box on the bottom screen; the one you're on, big and running, on the top screen
 static Btn CB[8];
 static void chLayout(void) {
     for (int k = 0; k < 7; k++) { int row = k < 4 ? 0 : 1, col = row ? k - 4 : k, n = row ? 3 : 4, x0 = (SW - n * 58 - (n - 1) * 4) / 2;
-        CB[k] = (Btn){ x0 + col * 62, 4 + row * 74, 58, 70, "", 0, 0 }; }
-    CB[7] = (Btn){ 68, 156, 120, 30, "OK", 0, 0 };
+        CB[k] = (Btn){ x0 + col * 62, 6 + row * 74, 58, 68, "", 0, 0 }; }
+    CB[7] = (Btn){ 68, 158, 120, 30, "OK", 0, 0 };
+}
+static float fitScale(int k, int w, int h) {             // the biggest size that fits a w x h box
+    float a = (float)w / runnerW(k), b = (float)h / RUN[k].h; return a < b ? a : b;
 }
 void drawJumpChars(void) {
     runnersInit(); chLayout();
     fillScreen(bufTop, DARK);
     textC(bufTop, 6, "PICK YOUR RUNNER", GOLD, 2);
-    gClipLo = 0; gClipHi = 2 * SH;
-    int k = charSel < 7 ? charSel : (int)JCHAR;
-    runnerPic(bufTop, k, SW / 2, 120, 2.0f, (frame++ / 10) % 2 ? 1 : 0);   // big, running on the spot
-    if (k == 6) blitScaled(jf_egg0r, JF_EGG0R_W, JF_EGG0R_H, SW / 2 + 52, 160, JF_EGG0R_W * 2, JF_EGG0R_H * 2);
+    int k = charSel < 7 ? charSel : jChar();
+    gClipLo = 0; gClipHi = SH;                                           // the big one: top screen only
+    float big = fitScale(k, 200, 140); if (big > 3.0f) big = 3.0f;
+    runnerPic(bufTop, k, SW / 2, 184, big, (frame++ / 10) % 2 ? 1 : 0);   // big, running on the spot
+    if (k == 6) blitScaled(jf_egg0r, JF_EGG0R_W, JF_EGG0R_H, SW / 2 + (int)(runnerW(k) * big / 2) + 18, 184 - JF_EGG0R_H, JF_EGG0R_W * 2, JF_EGG0R_H * 2);
     fillScreen(bufBot, DARK);
+    gClipLo = SH; gClipHi = 2 * SH;                                      // the little ones: bottom screen only
     for (int i = 0; i < 7; i++) {
-        int on = i == charSel, sel = i == (int)JCHAR;
-        u16 fr = on ? (sv.theme == 1 ? COL(28, 4, 4) : GOLD) : sel ? uiIcon : 0;
-        if (fr) { rect(bufBot, CB[i].x, CB[i].y, CB[i].w, 2, fr); rect(bufBot, CB[i].x, CB[i].y + CB[i].h - 2, CB[i].w, 2, fr); rect(bufBot, CB[i].x, CB[i].y, 2, CB[i].h, fr); rect(bufBot, CB[i].x + CB[i].w - 2, CB[i].y, 2, CB[i].h, fr); }
-        runnerPic(bufBot, i, CB[i].x + CB[i].w / 2, CB[i].y + 36, 1.4f * (RUN[i].cls ? 1.0f : 0.85f), 0);
+        Btn *c = &CB[i]; int on = i == charSel, sel = i == jChar();
+        u16 fr = on ? (sv.theme == 1 ? COL(28, 4, 4) : GOLD) : sel ? uiIcon : COL(8, 8, 10);
+        rect(bufBot, c->x, c->y, c->w, 2, fr); rect(bufBot, c->x, c->y + c->h - 2, c->w, 2, fr); rect(bufBot, c->x, c->y, 2, c->h, fr); rect(bufBot, c->x + c->w - 2, c->y, 2, c->h, fr);
+        float sc = fitScale(i, c->w - 10, c->h - 10);
+        runnerPic(bufBot, i, c->x + c->w / 2, c->y + (c->h + (int)(RUN[i].h * sc)) / 2, sc, on ? ((frame / 10) % 2 ? 1 : 0) : 0);
     }
+    gClipLo = 0; gClipHi = 2 * SH;
     drawBtns(bufBot, &CB[7], 1, charSel == 7 ? 0 : -1);
 }
 void inputJumpChars(void) {
@@ -684,11 +741,11 @@ void inputJumpChars(void) {
     if (kDown & KEY_B) { goScreen(S_JUMP_MENU); return; }
     if (kDown & KEY_LEFT) charSel = (charSel + 7) % 8;
     if (kDown & KEY_RIGHT) charSel = (charSel + 1) % 8;
-    if (kDown & KEY_UP) charSel = charSel >= 4 && charSel < 7 ? charSel - 4 : charSel;
-    if (kDown & KEY_DOWN) charSel = charSel < 4 ? (charSel < 3 ? charSel + 4 : 7) : 7;
+    if (kDown & KEY_UP) charSel = charSel == 7 ? 5 : charSel >= 4 ? charSel - 4 + (charSel > 4) : charSel;
+    if (kDown & KEY_DOWN) charSel = charSel < 4 ? (charSel == 0 ? 4 : charSel + 3) : 7;
     int keep = kDown; kDown &= ~(KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT);
     int s = charSel, h = btnInput(CB, 8, &s, 1); kDown = keep; charSel = s;
-    if (h >= 0 && h < 7) { JCHAR = h; saveWrite(); }
+    if (h >= 0 && h < 7) { setChar(h); saveWrite(); }
     if (h == 7) goScreen(S_JUMP_MENU);
 }
 void drawJumpOver(void) {

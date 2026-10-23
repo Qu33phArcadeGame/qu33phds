@@ -168,12 +168,14 @@ void drawFidget(void) {
 }
 
 // ── the pick screen (the website's: mode, spinner colour, first to) ───────
-static Btn FB[8];
+static Btn FB[9];
 static void menuLayout(void) {
     FB[0] = (Btn){ 6, 6, 120, 30, "1 PLAYER", mode2p ? 0 : LIME, 0 };   FB[1] = (Btn){ 130, 6, 120, 30, "2 PLAYER", mode2p ? LIME : 0, 0 };
     for (int i = 0; i < 3; i++) { FB[2 + i] = (Btn){ 20 + i * 76, 44, 70, 28, "", winGoals == 3 + i * 2 ? LIME : 0, 0 }; sprintf(FB[2 + i].label, "TO %d", 3 + i * 2); }
-    FB[5] = (Btn){ 6, 82, 120, 52, "GREEN", COL(15, 31, 18), 0 };       FB[6] = (Btn){ 130, 82, 120, 52, "BLUE", COL(17, 25, 31), 0 };
-    FB[7] = (Btn){ 68, 146, 120, 30, "BACK", 0, 0 };
+    // the spinner is a setting too (the chosen one in its colour, the other greyed); only PLAY starts
+    FB[5] = (Btn){ 6, 80, 120, 40, "GREEN", c1 == 0 ? COL(15, 31, 18) : COL(12, 12, 13), 0 };   FB[6] = (Btn){ 130, 80, 120, 40, "BLUE", c1 == 1 ? COL(17, 25, 31) : COL(12, 12, 13), 0 };
+    FB[7] = (Btn){ 58, 126, 140, 32, "PLAY", COL(31, 26, 9), 0 };
+    FB[8] = (Btn){ 78, 164, 100, 26, "BACK", 0, 0 };
 }
 void drawFidgetMenu(void) {
     char s[40];
@@ -181,24 +183,26 @@ void drawFidgetMenu(void) {
     textC(bufTop, 4, "FIDGET QU33PH", GOLD, 2);
     textC(bufTop, 36, mode2p ? "P1 - PICK YOUR SPINNER" : "PICK YOUR SPINNER", WHITE, 1);
     static float a; a += 0.03f;
-    blitRot(fd_spin0, FD_SPIN_W, FD_SPIN_H, 76, 108, a);
-    blitRot(fd_spin1, FD_SPIN_W, FD_SPIN_H, 180, 108, -a);
+    blitRot(fd_spin0, FD_SPIN_W, FD_SPIN_H, 76, 108, c1 == 0 ? a * 3 : a);       // the chosen one spins fast
+    blitRot(fd_spin1, FD_SPIN_W, FD_SPIN_H, 180, 108, c1 == 1 ? -a * 3 : -a);
+    { const char *nm = c1 ? "BLUE" : "GREEN"; text(bufTop, (c1 ? 180 : 76) - textW(nm, 1) / 2, 144, nm, c1 ? COL(17, 25, 31) : COL(15, 31, 18), 1); }
     textC(bufTop, 164, mode2p ? "P1 stylus/D-pad, P2 uses X B Y A" : "knock it off the far end to score", GREY, 1);
     sprintf(s, "WINS VS CPU %d", sv.arcadeBest[ARC_FIDGET]); text(bufTop, 6, 178, s, GREY, 1);
     coinCount(bufTop, SW - 50, 178);
     fillScreen(bufBot, DARK);
     menuLayout();
-    drawBtns(bufBot, FB, 8, menuSel);
+    drawBtns(bufBot, FB, 9, menuSel);
 }
 void inputFidgetMenu(void) {
     menuLayout();
     if (kDown & KEY_B) { goScreen(S_ARCADE); return; }
-    int h = btnInput(FB, 8, &menuSel, 2);
+    int h = btnInput(FB, 9, &menuSel, 2);
     if (h == 0) mode2p = 0;
     if (h == 1) mode2p = 1;
     if (h >= 2 && h <= 4) winGoals = 3 + (h - 2) * 2;
-    if (h == 5 || h == 6) { c1 = h - 5; startGame(); }
-    if (h == 7) goScreen(S_ARCADE);
+    if (h == 5 || h == 6) c1 = h - 5;
+    if (h == 7) startGame();
+    if (h == 8) goScreen(S_ARCADE);
 }
 static Btn OB[3];
 void drawFidgetOver(void) {
